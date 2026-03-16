@@ -43,6 +43,16 @@ var CostPerMillionTokens = map[string][2]float64{
 func EstimateCost(model string, inputTokens, outputTokens int) float64 {
 	prices, ok := CostPerMillionTokens[model]
 	if !ok {
+		// Prefix match: "claude-sonnet-4-20250514" → "claude-sonnet-4"
+		for key, p := range CostPerMillionTokens {
+			if len(model) > len(key) && model[:len(key)] == key {
+				prices = p
+				ok = true
+				break
+			}
+		}
+	}
+	if !ok {
 		return 0
 	}
 
