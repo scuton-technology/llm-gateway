@@ -67,7 +67,13 @@ func (rt *Router) HandleChatCompletion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Execute request
+	// ─── Streaming path ───
+	if req.Stream {
+		rt.handleStream(w, r, provider, req)
+		return
+	}
+
+	// ─── Non-streaming path ───
 	start := time.Now()
 	resp, err := provider.ChatCompletion(r.Context(), req)
 	latency := time.Since(start)
@@ -99,6 +105,53 @@ func (rt *Router) HandleChatCompletion(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-LLM-Provider", provider.Name())
 	w.Header().Set("X-LLM-Latency-Ms", fmt.Sprintf("%d", latency.Milliseconds()))
 	json.NewEncoder(w).Encode(resp)
+}
+
+// handleStream handles SSE streaming requests.
+func (rt *Router) handleStream(w http.ResponseWriter, r *http.Request, provider providers.Provider, req providers.ChatRequest) {
+	sp, ok := provider.(providers.StreamProvider)
+	if !ok {
+		writeError(w, http.StatusBadRequest,
+			fmt.Sprintf("provider %q does not support streaming", provider.Name()),
+			"streaming_not_supported")
+		return
+	}
+
+	// Set SSE headers before writing any data
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no") // Disable nginx/proxy buffering
+	w.Header().Set("X-LLM-Provider", provider.Name())
+
+	start := time.Now()
+	usage, err := sp.ChatCompletionStream(r.Context(), req, w)
+	latency := time.Since(start)
+
+	// Log the streaming request
+	logEntry := storage.RequestLog{
+		Model:     req.Model,
+		Provider:  provider.Name(),
+		LatencyMs: latency.Milliseconds(),
+		ClientIP:  clientIP(r),
+	}
+
+	if err != nil {
+		logEntry.StatusCode = http.StatusBadGateway
+		logEntry.ErrorMessage = err.Error()
+		rt.logRequest(logEntry)
+		// Can't write error response after streaming has started — log only
+		log.Printf("streaming error for %s/%s: %v", provider.Name(), req.Model, err)
+		return
+	}
+
+	logEntry.StatusCode = http.StatusOK
+	if usage != nil {
+		logEntry.PromptTokens = usage.PromptTokens
+		logEntry.CompletionTokens = usage.CompletionTokens
+		logEntry.TotalTokens = usage.TotalTokens
+	}
+	rt.logRequest(logEntry)
 }
 
 func (rt *Router) HandleHealth(w http.ResponseWriter, r *http.Request) {

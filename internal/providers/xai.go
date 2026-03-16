@@ -74,3 +74,8 @@ func (p *XAIProvider) ChatCompletion(ctx context.Context, req ChatRequest) (*Cha
 
 	return &chatResp, nil
 }
+
+// ChatCompletionStream implements StreamProvider — xAI uses OpenAI-compatible SSE.
+func (p *XAIProvider) ChatCompletionStream(ctx context.Context, req ChatRequest, w http.ResponseWriter) (*Usage, error) {
+	return OpenAIPassthroughStream(ctx, "https://api.x.ai/v1/chat/completions", p.apiKey, req, w)
+}

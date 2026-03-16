@@ -74,3 +74,8 @@ func (p *PerplexityProvider) ChatCompletion(ctx context.Context, req ChatRequest
 
 	return &chatResp, nil
 }
+
+// ChatCompletionStream implements StreamProvider — Perplexity uses OpenAI-compatible SSE.
+func (p *PerplexityProvider) ChatCompletionStream(ctx context.Context, req ChatRequest, w http.ResponseWriter) (*Usage, error) {
+	return OpenAIPassthroughStream(ctx, "https://api.perplexity.ai/chat/completions", p.apiKey, req, w)
+}

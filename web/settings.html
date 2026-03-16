@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LLM Gateway — Settings</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg-primary: #09090b; --bg-secondary: #111113; --bg-card: #111113; --bg-input: #09090b;
+    --text-primary: #e5e5e5; --text-secondary: #71717a; --text-muted: #52525b;
+    --border-color: #1e1e22; --accent: #6366f1; --accent-light: #818cf8;
+    --hover-bg: #18181b; --ok: #22c55e; --err: #fb7185;
+    --banner-bg: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%);
+    --banner-border: #3730a3; --banner-text: #c7d2fe; --banner-sub: #a5b4fc;
+    --note-bg: #1c1917; --note-border: #44403c; --note-text: #a8a29e;
+    --save-bg: #1e1b4b; --save-border: #3730a3; --save-text: #818cf8;
+    --test-bg: #052e16; --test-border: #14532d; --test-text: #22c55e;
+    --del-bg: #450a0a; --del-border: #7f1d1d; --del-text: #fb7185;
+    --row-active: #22c55e;
+  }
+  [data-theme="light"] {
+    --bg-primary: #f5f5f5; --bg-secondary: #ffffff; --bg-card: #ffffff; --bg-input: #f5f5f5;
+    --text-primary: #18181b; --text-secondary: #71717a; --text-muted: #a1a1aa;
+    --border-color: #e5e5e5; --accent: #4f46e5; --accent-light: #6366f1;
+    --hover-bg: #f0f0f0; --ok: #16a34a; --err: #dc2626;
+    --banner-bg: linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%);
+    --banner-border: #a5b4fc; --banner-text: #312e81; --banner-sub: #4338ca;
+    --note-bg: #fefce8; --note-border: #fde68a; --note-text: #78716c;
+    --save-bg: #eef2ff; --save-border: #c7d2fe; --save-text: #4f46e5;
+    --test-bg: #f0fdf4; --test-border: #86efac; --test-text: #16a34a;
+    --del-bg: #fef2f2; --del-border: #fecaca; --del-text: #dc2626;
+    --row-active: #16a34a;
+  }
+
+  body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg-primary); color: var(--text-primary); display: flex; min-height: 100vh; }
+
+  .sidebar { width: 220px; background: var(--bg-secondary); border-right: 1px solid var(--border-color); padding: 1.25rem 0; flex-shrink: 0; display: flex; flex-direction: column; }
+  .sidebar-brand { padding: 0 1.25rem 1.25rem; border-bottom: 1px solid var(--border-color); margin-bottom: 0.5rem; }
+  .sidebar-brand h1 { font-size: 1.1rem; font-weight: 700; color: var(--text-primary); }
+  .sidebar-brand h1 span { color: var(--accent); }
+  .sidebar-nav { list-style: none; }
+  .sidebar-nav a { display: flex; align-items: center; gap: 0.6rem; padding: 0.6rem 1.25rem; color: var(--text-secondary); text-decoration: none; font-size: 0.85rem; font-weight: 500; transition: all 0.15s; border-left: 3px solid transparent; }
+  .sidebar-nav a:hover { color: var(--text-primary); background: var(--hover-bg); }
+  .sidebar-nav a.active { color: var(--accent-light); background: var(--hover-bg); border-left-color: var(--accent); }
+  .sidebar-nav .icon { font-size: 1rem; width: 20px; text-align: center; }
+  .sidebar-bottom { margin-top: auto; padding: 0.75rem 1.25rem; border-top: 1px solid var(--border-color); }
+  .sidebar-bottom a { color: var(--text-secondary); font-size: 0.8rem; text-decoration: none; }
+
+  .main { flex: 1; padding: 2rem; overflow-y: auto; }
+  .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
+  .page-header h2 { font-size: 1.3rem; font-weight: 700; color: var(--text-primary); }
+  .page-header .subtitle { font-size: 0.8rem; color: var(--text-muted); margin-top: 0.2rem; }
+  .theme-btn { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 8px; padding: 0.3rem 0.5rem; cursor: pointer; font-size: 1rem; color: var(--text-primary); }
+
+  .welcome-banner { background: var(--banner-bg); border: 1px solid var(--banner-border); border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; display: none; }
+  .welcome-banner.visible { display: block; }
+  .welcome-banner h3 { color: var(--banner-text); font-size: 1rem; margin-bottom: 0.4rem; }
+  .welcome-banner p { color: var(--banner-sub); font-size: 0.85rem; line-height: 1.5; }
+
+  .security-note { background: var(--note-bg); border: 1px solid var(--note-border); border-radius: 8px; padding: 0.75rem 1rem; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.5rem; }
+  .security-note p { font-size: 0.75rem; color: var(--note-text); }
+  .security-note strong { color: #fbbf24; }
+
+  .section-title { font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; margin: 1.5rem 0 0.75rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border-color); }
+
+  .provider-row { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 10px; padding: 1rem 1.25rem; margin-bottom: 0.6rem; display: grid; grid-template-columns: 140px 1fr auto auto; gap: 0.75rem; align-items: center; transition: border-color 0.15s; }
+  .provider-row:hover { border-color: var(--text-muted); }
+  .provider-row.has-key { border-left: 3px solid var(--row-active); }
+  .provider-row.no-key { border-left: 3px solid var(--border-color); }
+
+  .provider-name { font-weight: 700; font-size: 0.9rem; color: var(--text-primary); display: flex; align-items: center; gap: 0.5rem; }
+  .provider-type { font-size: 0.6rem; padding: 0.1rem 0.35rem; border-radius: 3px; font-weight: 600; text-transform: uppercase; }
+  .type-cloud { background: var(--save-bg); color: var(--accent-light); }
+  .type-local { background: var(--test-bg); color: var(--ok); }
+
+  .key-input-wrap { position: relative; display: flex; gap: 0.35rem; }
+  .key-input { flex: 1; background: var(--bg-input); border: 1px solid var(--border-color); border-radius: 6px; padding: 0.45rem 2rem 0.45rem 0.65rem; color: var(--text-primary); font-size: 0.8rem; font-family: 'SF Mono', 'Fira Code', monospace; outline: none; transition: border-color 0.15s; }
+  .key-input:focus { border-color: var(--accent); }
+  .key-input::placeholder { color: var(--text-muted); }
+  .toggle-vis { position: absolute; right: 0.5rem; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 0.85rem; padding: 0.2rem; }
+
+  .btn-sm { background: var(--bg-secondary); color: var(--text-secondary); border: 1px solid var(--border-color); padding: 0.4rem 0.7rem; border-radius: 6px; cursor: pointer; font-size: 0.75rem; font-weight: 600; transition: all 0.15s; white-space: nowrap; }
+  .btn-sm:hover { color: var(--text-primary); }
+  .btn-save { background: var(--save-bg); color: var(--save-text); border-color: var(--save-border); }
+  .btn-test { background: var(--test-bg); color: var(--test-text); border-color: var(--test-border); }
+  .btn-delete { background: var(--del-bg); color: var(--del-text); border-color: var(--del-border); }
+
+  .status-badge { font-size: 0.7rem; font-weight: 700; padding: 0.15rem 0.5rem; border-radius: 4px; white-space: nowrap; min-width: 80px; text-align: center; }
+  .status-active { background: var(--test-bg); color: var(--ok); }
+  .status-empty { background: var(--hover-bg); color: var(--text-muted); }
+  .status-testing { background: var(--save-bg); color: var(--accent-light); }
+  .status-error { background: var(--del-bg); color: var(--err); }
+  .status-local { background: var(--test-bg); color: #34d399; }
+
+  .toast-container { position: fixed; top: 1rem; right: 1rem; z-index: 1000; display: flex; flex-direction: column; gap: 0.5rem; }
+  .toast { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 8px; padding: 0.75rem 1rem; font-size: 0.8rem; color: var(--text-primary); animation: slideIn 0.3s ease-out; min-width: 250px; display: flex; align-items: center; gap: 0.5rem; }
+  @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+  .actions-cell { display: flex; gap: 0.35rem; }
+
+  @media (max-width: 900px) {
+    .sidebar { width: 60px; }
+    .sidebar-brand h1, .sidebar-nav span:not(.icon), .sidebar-bottom { display: none; }
+    .provider-row { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+  <nav class="sidebar">
+    <div>
+      <div class="sidebar-brand"><h1><span>LLM</span> Gateway</h1></div>
+      <ul class="sidebar-nav">
+        <li><a href="/admin"><span class="icon">&#128202;</span> <span>Dashboard</span></a></li>
+        <li><a href="/admin/analytics"><span class="icon">&#128200;</span> <span>Analytics</span></a></li>
+        <li><a href="/admin/settings" class="active"><span class="icon">&#9881;&#65039;</span> <span>Settings</span></a></li>
+      </ul>
+    </div>
+    <div class="sidebar-bottom"><a href="/admin/logout">&#128682; Logout</a></div>
+  </nav>
+
+  <div class="main">
+    <div class="page-header">
+      <div>
+        <h2>&#9881;&#65039; Provider Settings</h2>
+        <div class="subtitle">Manage API keys and provider connections. Priority: .env &#8594; SQLite &#8594; empty</div>
+      </div>
+      <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">&#127769;</button>
+    </div>
+
+    <div class="welcome-banner" id="welcomeBanner">
+      <h3>&#128075; No API keys configured yet.</h3>
+      <p>Add at least one provider API key below to start proxying LLM requests.</p>
+    </div>
+
+    <div class="security-note">
+      <span style="font-size:1rem;">&#128274;</span>
+      <p><strong>Security note:</strong> API keys are stored in SQLite (plaintext). For production, use environment variables (.env) instead.</p>
+    </div>
+
+    <div class="section-title">Cloud Providers</div>
+    <div id="cloudProviders"></div>
+
+    <div class="section-title">Local / Self-hosted Providers</div>
+    <div id="localProviders"></div>
+  </div>
+
+  <div class="toast-container" id="toasts"></div>
+
+<script>
+function getTheme() { return localStorage.getItem('llm-gw-theme') || (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'); }
+function applyTheme(t) { document.documentElement.setAttribute('data-theme', t); document.getElementById('themeBtn').innerHTML = t === 'dark' ? '&#127769;' : '&#9728;&#65039;'; }
+function toggleTheme() { const t = getTheme() === 'dark' ? 'light' : 'dark'; localStorage.setItem('llm-gw-theme', t); applyTheme(t); }
+applyTheme(getTheme());
+
+let settings = [];
+
+function showToast(message, type = 'success') {
+  const container = document.getElementById('toasts');
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+  toast.innerHTML = `<span>${type === 'success' ? '&#9989;' : '&#10060;'}</span> ${message}`;
+  container.appendChild(toast);
+  setTimeout(() => toast.remove(), 4000);
+}
+
+function renderProvider(s) {
+  const isLocal = s.type === 'local';
+  const hasKey = s.has_key;
+  const inputType = isLocal ? 'text' : 'password';
+  const inputPlaceholder = s.placeholder || (isLocal ? 'http://localhost:...' : 'Enter API key...');
+  const displayValue = isLocal ? (s.base_url || '') : (s.masked_key || '');
+
+  return `
+    <div class="provider-row ${hasKey ? 'has-key' : 'no-key'}" id="row-${s.provider}">
+      <div class="provider-name">
+        ${s.provider}
+        <span class="provider-type ${isLocal ? 'type-local' : 'type-cloud'}">${isLocal ? 'Local' : 'Cloud'}</span>
+      </div>
+      <div class="key-input-wrap">
+        <input type="${inputType}" class="key-input" id="input-${s.provider}" placeholder="${inputPlaceholder}" value="${displayValue}" data-provider="${s.provider}" data-type="${s.type}" data-has-key="${hasKey}">
+        ${!isLocal ? '<button class="toggle-vis" onclick="toggleVisibility(\'' + s.provider + '\')" title="Show/Hide">&#128065;</button>' : ''}
+      </div>
+      <div class="actions-cell">
+        <button class="btn-sm btn-save" onclick="saveProvider('${s.provider}')">&#128190; Save</button>
+        <button class="btn-sm btn-test" onclick="testProvider('${s.provider}')">&#128268; Test</button>
+        ${hasKey ? '<button class="btn-sm btn-delete" onclick="deleteProvider(\'' + s.provider + '\')">&#128465;</button>' : ''}
+      </div>
+      <span class="status-badge ${hasKey ? (isLocal ? 'status-local' : 'status-active') : 'status-empty'}" id="status-${s.provider}">
+        ${hasKey ? (isLocal ? '&#128994; Local' : '&#9989; Active') : '&#8212; Empty'}
+      </span>
+    </div>`;
+}
+
+async function loadSettings() {
+  try {
+    const res = await fetch('/api/settings');
+    if (res.status === 401) { window.location.href = '/admin/login'; return; }
+    settings = await res.json();
+    document.getElementById('cloudProviders').innerHTML = settings.filter(s => s.type === 'cloud').map(renderProvider).join('');
+    document.getElementById('localProviders').innerHTML = settings.filter(s => s.type === 'local').map(renderProvider).join('');
+    document.getElementById('welcomeBanner').classList.toggle('visible', !settings.some(s => s.has_key));
+  } catch (e) { showToast('Failed to load settings', 'error'); }
+}
+
+function toggleVisibility(provider) { const input = document.getElementById(`input-${provider}`); input.type = input.type === 'password' ? 'text' : 'password'; }
+
+async function saveProvider(provider) {
+  const input = document.getElementById(`input-${provider}`);
+  const value = input.value.trim();
+  const isLocal = input.dataset.type === 'local';
+  if (!value) { showToast(`Please enter ${isLocal ? 'a base URL' : 'an API key'}`, 'error'); return; }
+  if (!isLocal && input.dataset.hasKey === 'true' && value.includes('\u2022')) { showToast('Key unchanged', 'error'); return; }
+  const statusEl = document.getElementById(`status-${provider}`);
+  statusEl.className = 'status-badge status-testing'; statusEl.textContent = 'Saving...';
+  try {
+    const body = isLocal ? { provider, api_key: '', base_url: value } : { provider, api_key: value, base_url: '' };
+    const res = await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    if (!res.ok) throw new Error(await res.text());
+    showToast(`${provider} saved`);
+    await loadSettings();
+  } catch (e) { statusEl.className = 'status-badge status-error'; statusEl.textContent = 'Error'; showToast(`Failed: ${e.message}`, 'error'); }
+}
+
+async function testProvider(provider) {
+  const input = document.getElementById(`input-${provider}`);
+  const statusEl = document.getElementById(`status-${provider}`);
+  const isLocal = input.dataset.type === 'local';
+  statusEl.className = 'status-badge status-testing'; statusEl.textContent = 'Testing...';
+  try {
+    const value = input.value.trim();
+    const body = isLocal ? { provider, base_url: value } : { provider, api_key: (value.includes('\u2022') ? '' : value) };
+    const res = await fetch('/api/settings/test', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const result = await res.json();
+    if (result.ok) { statusEl.className = 'status-badge status-active'; statusEl.textContent = `OK (${result.latency_ms}ms)`; showToast(`${provider} reachable (${result.latency_ms}ms)`); }
+    else { statusEl.className = 'status-badge status-error'; statusEl.textContent = 'Failed'; showToast(`${provider}: ${result.error || 'HTTP ' + result.status}`, 'error'); }
+  } catch (e) { statusEl.className = 'status-badge status-error'; statusEl.textContent = 'Error'; showToast(`Test failed: ${e.message}`, 'error'); }
+}
+
+async function deleteProvider(provider) {
+  if (!confirm(`Remove API key for ${provider}?`)) return;
+  try {
+    const res = await fetch('/api/settings/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ provider }) });
+    if (!res.ok) throw new Error(await res.text());
+    showToast(`${provider} removed`);
+    await loadSettings();
+  } catch (e) { showToast(`Failed: ${e.message}`, 'error'); }
+}
+
+loadSettings();
+</script>
+</body>
+</html>

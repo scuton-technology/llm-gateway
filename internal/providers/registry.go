@@ -107,6 +107,19 @@ func (r *Registry) ListProviders() []string {
 	return names
 }
 
+// ReplaceWith swaps the internal state of this registry with another.
+// This enables hot-reloading providers without replacing the pointer.
+func (r *Registry) ReplaceWith(other *Registry) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	other.mu.RLock()
+	defer other.mu.RUnlock()
+
+	r.providers = other.providers
+	r.prefixMap = other.prefixMap
+	r.exactMap = other.exactMap
+}
+
 // ListModels returns all supported models across all providers.
 func (r *Registry) ListModels() []string {
 	r.mu.RLock()

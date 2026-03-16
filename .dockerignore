@@ -1,0 +1,5 @@
+gateway.exe
+gateway.db
+*.db
+.env
+.git

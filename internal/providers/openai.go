@@ -92,3 +92,9 @@ func (p *OpenAIProvider) ChatCompletion(ctx context.Context, req ChatRequest) (*
 
 	return &chatResp, nil
 }
+
+// ChatCompletionStream implements StreamProvider for OpenAI-compatible APIs.
+func (p *OpenAIProvider) ChatCompletionStream(ctx context.Context, req ChatRequest, w http.ResponseWriter) (*Usage, error) {
+	url := p.baseURL + "/v1/chat/completions"
+	return OpenAIPassthroughStream(ctx, url, p.apiKey, req, w)
+}

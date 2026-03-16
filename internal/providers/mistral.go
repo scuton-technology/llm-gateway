@@ -75,3 +75,8 @@ func (p *MistralProvider) ChatCompletion(ctx context.Context, req ChatRequest) (
 
 	return &chatResp, nil
 }
+
+// ChatCompletionStream implements StreamProvider — Mistral uses OpenAI-compatible SSE.
+func (p *MistralProvider) ChatCompletionStream(ctx context.Context, req ChatRequest, w http.ResponseWriter) (*Usage, error) {
+	return OpenAIPassthroughStream(ctx, "https://api.mistral.ai/v1/chat/completions", p.apiKey, req, w)
+}

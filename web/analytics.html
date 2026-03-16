@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LLM Gateway — Analytics</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg-primary: #09090b; --bg-secondary: #111113; --bg-card: #111113; --bg-input: #09090b;
+    --text-primary: #e5e5e5; --text-secondary: #71717a; --text-muted: #52525b;
+    --border-color: #1e1e22; --chart-grid: #1e1e22;
+    --accent: #6366f1; --accent-light: #818cf8;
+    --hover-bg: #18181b; --ok: #22c55e; --err: #fb7185;
+  }
+  [data-theme="light"] {
+    --bg-primary: #f5f5f5; --bg-secondary: #ffffff; --bg-card: #ffffff; --bg-input: #f5f5f5;
+    --text-primary: #18181b; --text-secondary: #71717a; --text-muted: #a1a1aa;
+    --border-color: #e5e5e5; --chart-grid: #e5e5e5;
+    --accent: #4f46e5; --accent-light: #6366f1;
+    --hover-bg: #f0f0f0; --ok: #16a34a; --err: #dc2626;
+  }
+
+  body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg-primary); color: var(--text-primary); display: flex; min-height: 100vh; }
+
+  .sidebar { width: 220px; background: var(--bg-secondary); border-right: 1px solid var(--border-color); padding: 1.25rem 0; flex-shrink: 0; display: flex; flex-direction: column; }
+  .sidebar-brand { padding: 0 1.25rem 1.25rem; border-bottom: 1px solid var(--border-color); margin-bottom: 0.5rem; }
+  .sidebar-brand h1 { font-size: 1.1rem; font-weight: 700; color: var(--text-primary); }
+  .sidebar-brand h1 span { color: var(--accent); }
+  .sidebar-nav { list-style: none; }
+  .sidebar-nav a { display: flex; align-items: center; gap: 0.6rem; padding: 0.6rem 1.25rem; color: var(--text-secondary); text-decoration: none; font-size: 0.85rem; font-weight: 500; transition: all 0.15s; border-left: 3px solid transparent; }
+  .sidebar-nav a:hover { color: var(--text-primary); background: var(--hover-bg); }
+  .sidebar-nav a.active { color: var(--accent-light); background: var(--hover-bg); border-left-color: var(--accent); }
+  .sidebar-nav .icon { font-size: 1rem; width: 20px; text-align: center; }
+  .sidebar-bottom { margin-top: auto; padding: 0.75rem 1.25rem; border-top: 1px solid var(--border-color); }
+  .sidebar-bottom a { color: var(--text-secondary); font-size: 0.8rem; text-decoration: none; }
+
+  .main { flex: 1; padding: 2rem; overflow-y: auto; }
+
+  .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
+  .page-header h2 { font-size: 1.3rem; font-weight: 700; }
+  .header-actions { display: flex; gap: 0.5rem; align-items: center; }
+  .theme-btn { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 8px; padding: 0.3rem 0.5rem; cursor: pointer; font-size: 1rem; color: var(--text-primary); }
+
+  /* Period selector */
+  .period-selector { display: flex; gap: 0.3rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
+  .period-btn { background: var(--bg-secondary); color: var(--text-secondary); border: 1px solid var(--border-color); padding: 0.4rem 0.8rem; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-weight: 600; transition: all 0.15s; }
+  .period-btn:hover { color: var(--text-primary); background: var(--hover-bg); }
+  .period-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+  /* Stat cards */
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem; margin-bottom: 1.5rem; }
+  .stat-card { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 10px; padding: 1rem 1.25rem; }
+  .stat-label { font-size: 0.7rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
+  .stat-value { font-size: 1.6rem; font-weight: 800; margin-top: 0.15rem; font-variant-numeric: tabular-nums; }
+  .stat-value.indigo { color: var(--accent-light); }
+  .stat-value.emerald { color: #34d399; }
+  .stat-value.amber { color: #fbbf24; }
+  .stat-value.rose { color: var(--err); }
+
+  /* Charts */
+  .charts-grid { display: grid; grid-template-columns: 1fr; gap: 0.75rem; margin-bottom: 1.5rem; }
+  .charts-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 1.5rem; }
+  .chart-card { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 10px; padding: 1.25rem; }
+  .chart-title { font-size: 0.8rem; color: var(--text-secondary); font-weight: 600; margin-bottom: 0.75rem; }
+  .chart-container { position: relative; height: 280px; }
+  .chart-container-lg { position: relative; height: 350px; }
+
+  /* Table */
+  .table-card { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 10px; overflow: hidden; }
+  .table-header { display: flex; justify-content: space-between; align-items: center; padding: 1rem 1.25rem 0.75rem; }
+  .table-header h3 { font-size: 0.9rem; font-weight: 600; }
+  .btn-export { background: var(--bg-secondary); color: var(--text-secondary); border: 1px solid var(--border-color); padding: 0.35rem 0.7rem; border-radius: 6px; cursor: pointer; font-size: 0.75rem; font-weight: 600; transition: all 0.15s; }
+  .btn-export:hover { color: var(--text-primary); }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { padding: 0.6rem 1.25rem; text-align: left; font-size: 0.8rem; }
+  th { color: var(--text-muted); font-weight: 600; text-transform: uppercase; font-size: 0.65rem; letter-spacing: 0.06em; border-bottom: 1px solid var(--border-color); }
+  td { border-bottom: 1px solid var(--border-color); color: var(--text-secondary); }
+  tr:hover td { background: var(--hover-bg); }
+  .cost-tag { color: #34d399; font-weight: 600; }
+  .model-tag { color: var(--accent-light); font-weight: 600; }
+  .empty-state { text-align: center; padding: 3rem; color: var(--text-muted); }
+
+  @media (max-width: 900px) {
+    .sidebar { width: 60px; }
+    .sidebar-brand h1, .sidebar-nav span:not(.icon), .sidebar-bottom { display: none; }
+    .charts-2col { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+  <nav class="sidebar">
+    <div>
+      <div class="sidebar-brand"><h1><span>LLM</span> Gateway</h1></div>
+      <ul class="sidebar-nav">
+        <li><a href="/admin"><span class="icon">&#128202;</span> <span>Dashboard</span></a></li>
+        <li><a href="/admin/analytics" class="active"><span class="icon">&#128200;</span> <span>Analytics</span></a></li>
+        <li><a href="/admin/settings"><span class="icon">&#9881;&#65039;</span> <span>Settings</span></a></li>
+      </ul>
+    </div>
+    <div class="sidebar-bottom"><a href="/admin/logout">&#128682; Logout</a></div>
+  </nav>
+
+  <div class="main">
+    <div class="page-header">
+      <h2>&#128200; Spending Analytics</h2>
+      <div class="header-actions">
+        <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">&#127769;</button>
+      </div>
+    </div>
+
+    <div class="period-selector" id="periodSelector">
+      <button class="period-btn" data-days="7">Last 7 days</button>
+      <button class="period-btn active" data-days="30">Last 30 days</button>
+      <button class="period-btn" data-days="90">Last 3 months</button>
+      <button class="period-btn" data-days="365">Last 12 months</button>
+    </div>
+
+    <div class="stats-grid" id="summaryCards">
+      <div class="stat-card"><div class="stat-label">Loading...</div></div>
+    </div>
+
+    <div class="charts-grid">
+      <div class="chart-card">
+        <div class="chart-title">Cost &amp; Requests Over Time</div>
+        <div class="chart-container-lg"><canvas id="timelineChart"></canvas></div>
+      </div>
+    </div>
+
+    <div class="charts-2col">
+      <div class="chart-card">
+        <div class="chart-title">Provider Breakdown (Stacked)</div>
+        <div class="chart-container"><canvas id="providerStackChart"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">Model Cost Ranking</div>
+        <div class="chart-container"><canvas id="modelCostChart"></canvas></div>
+      </div>
+    </div>
+
+    <div class="table-card">
+      <div class="table-header">
+        <h3>Period Summary</h3>
+        <button class="btn-export" onclick="exportCSV()">&#128196; Export CSV</button>
+      </div>
+      <table>
+        <thead>
+          <tr><th>Period</th><th>Requests</th><th>Tokens</th><th>Est. Cost</th><th>Errors</th><th>Avg Latency</th><th>Top Model</th></tr>
+        </thead>
+        <tbody id="summaryTable"><tr><td colspan="7" class="empty-state">Loading...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+<script>
+const COLORS = ['#818cf8','#34d399','#fbbf24','#fb7185','#22d3ee','#a78bfa','#f97316','#84cc16','#e879f9'];
+const COSTS = {
+  'claude-opus-4': [15,75], 'claude-sonnet-4': [3,15], 'claude-haiku-4': [0.25,1.25],
+  'gpt-4o': [2.5,10], 'gpt-4o-mini': [0.15,0.6], 'o1': [15,60], 'o3-mini': [1.1,4.4],
+  'gemini-2.0-flash': [0.1,0.4], 'gemini-1.5-pro': [1.25,5],
+  'llama-3.3-70b-versatile': [0.59,0.79], 'mixtral-8x7b-32768': [0.24,0.24],
+  'mistral-large-latest': [2,6], 'mistral-small-latest': [0.2,0.6], 'codestral-latest': [0.3,0.9],
+  'command-r-plus': [2.5,10], 'command-r': [0.15,0.6],
+  'grok-2': [2,10], 'grok-2-mini': [0.2,1],
+  'sonar-large': [1,1], 'sonar-small': [0.2,0.2],
+};
+
+function estimateCostFromTokens(model, prompt, completion) {
+  let p = COSTS[model];
+  if (!p) { for (const key of Object.keys(COSTS)) { if (model.startsWith(key)) { p = COSTS[key]; break; } } }
+  if (!p) return 0;
+  return (prompt / 1e6 * p[0]) + (completion / 1e6 * p[1]);
+}
+
+function formatCost(usd) {
+  if (usd === 0) return '$0.00';
+  if (usd < 0.01) return '$' + usd.toFixed(4);
+  return '$' + usd.toFixed(2);
+}
+
+// Theme
+function getTheme() { return localStorage.getItem('llm-gw-theme') || (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'); }
+function applyTheme(t) { document.documentElement.setAttribute('data-theme', t); document.getElementById('themeBtn').innerHTML = t === 'dark' ? '&#127769;' : '&#9728;&#65039;'; }
+function toggleTheme() { const t = getTheme() === 'dark' ? 'light' : 'dark'; localStorage.setItem('llm-gw-theme', t); applyTheme(t); loadAnalytics(currentDays); }
+applyTheme(getTheme());
+function isDark() { return getTheme() === 'dark'; }
+
+let currentDays = 30;
+let timelineChart = null, providerStackChart = null, modelCostChart = null;
+let tableData = [];
+
+// Period selector
+document.querySelectorAll('.period-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentDays = parseInt(btn.dataset.days);
+    loadAnalytics(currentDays);
+  });
+});
+
+async function loadAnalytics(days) {
+  const gridColor = isDark() ? '#1e1e22' : '#e5e5e5';
+  const tickColor = isDark() ? '#52525b' : '#a1a1aa';
+
+  try {
+    const [dailyRes, providerRes, modelRes] = await Promise.all([
+      fetch(`/api/stats/daily?days=${days}`),
+      fetch(`/api/stats/providers?days=${days}`),
+      fetch(`/api/stats/models?days=${days}`)
+    ]);
+
+    if (dailyRes.status === 401) { window.location.href = '/admin/login'; return; }
+
+    const daily = await dailyRes.json() || [];
+    const providerData = await providerRes.json() || [];
+    const modelData = await modelRes.json() || [];
+
+    // Summary cards
+    let totalCost = 0, totalReqs = 0, totalErrors = 0, totalLatency = 0;
+    daily.forEach(d => {
+      totalCost += estimateCostFromTokens('', 0, 0); // We need to calculate from token data
+      totalReqs += d.requests;
+      totalErrors += d.errors;
+      totalLatency += d.avg_latency_ms * d.requests;
+    });
+
+    // Calculate cost from daily token data
+    totalCost = 0;
+    daily.forEach(d => {
+      // We approximate using average cost since we don't have per-model daily breakdown
+      totalCost += estimateCostFromTokens(d.top_model || '', d.prompt_tokens, d.completion_tokens);
+    });
+
+    const avgLatency = totalReqs > 0 ? totalLatency / totalReqs : 0;
+    const errorRate = totalReqs > 0 ? (totalErrors / totalReqs * 100).toFixed(1) : '0.0';
+
+    document.getElementById('summaryCards').innerHTML = `
+      <div class="stat-card"><div class="stat-label">Total Cost</div><div class="stat-value emerald">${formatCost(totalCost)}</div></div>
+      <div class="stat-card"><div class="stat-label">Total Requests</div><div class="stat-value indigo">${totalReqs.toLocaleString()}</div></div>
+      <div class="stat-card"><div class="stat-label">Avg Latency</div><div class="stat-value amber">${Math.round(avgLatency)}ms</div></div>
+      <div class="stat-card"><div class="stat-label">Error Rate</div><div class="stat-value rose">${errorRate}%</div></div>
+    `;
+
+    // Timeline chart — dual axis: cost (left) + requests (right)
+    const timeLabels = daily.map(d => d.period);
+    const costData = daily.map(d => estimateCostFromTokens(d.top_model || '', d.prompt_tokens, d.completion_tokens));
+    const reqData = daily.map(d => d.requests);
+
+    if (timelineChart) timelineChart.destroy();
+    timelineChart = new Chart(document.getElementById('timelineChart'), {
+      type: 'line',
+      data: {
+        labels: timeLabels,
+        datasets: [
+          { label: 'Cost ($)', data: costData, borderColor: '#34d399', backgroundColor: 'rgba(52,211,153,0.1)', fill: true, yAxisID: 'y', tension: 0.3, borderWidth: 2, pointRadius: 3 },
+          { label: 'Requests', data: reqData, borderColor: '#818cf8', backgroundColor: 'rgba(129,140,248,0.1)', fill: true, yAxisID: 'y1', tension: 0.3, borderWidth: 2, pointRadius: 3 }
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { labels: { color: tickColor, font: { size: 11 }, usePointStyle: true } } },
+        scales: {
+          x: { grid: { color: gridColor }, ticks: { color: tickColor, font: { size: 10 }, maxRotation: 45 } },
+          y: { type: 'linear', position: 'left', grid: { color: gridColor }, ticks: { color: '#34d399', font: { size: 10 }, callback: v => '$' + v.toFixed(2) }, title: { display: true, text: 'Cost ($)', color: '#34d399', font: { size: 11 } } },
+          y1: { type: 'linear', position: 'right', grid: { drawOnChartArea: false }, ticks: { color: '#818cf8', font: { size: 10 } }, title: { display: true, text: 'Requests', color: '#818cf8', font: { size: 11 } } }
+        }
+      }
+    });
+
+    // Provider stacked bar
+    const allPeriods = [...new Set(providerData.map(p => p.period))].sort();
+    const allProviders = [...new Set(providerData.map(p => p.provider))];
+    const providerDatasets = allProviders.map((prov, i) => ({
+      label: prov,
+      data: allPeriods.map(period => {
+        const match = providerData.find(p => p.period === period && p.provider === prov);
+        return match ? match.requests : 0;
+      }),
+      backgroundColor: COLORS[i % COLORS.length],
+      borderWidth: 0, borderRadius: 2
+    }));
+
+    if (providerStackChart) providerStackChart.destroy();
+    providerStackChart = new Chart(document.getElementById('providerStackChart'), {
+      type: 'bar',
+      data: { labels: allPeriods, datasets: providerDatasets },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { labels: { color: tickColor, font: { size: 10 }, usePointStyle: true, pointStyleWidth: 8 } } },
+        scales: {
+          x: { stacked: true, grid: { color: gridColor }, ticks: { color: tickColor, font: { size: 10 }, maxRotation: 45 } },
+          y: { stacked: true, grid: { color: gridColor }, ticks: { color: tickColor, font: { size: 10 } } }
+        }
+      }
+    });
+
+    // Model cost horizontal bar
+    const modelCosts = modelData.map(m => ({
+      model: m.model,
+      cost: estimateCostFromTokens(m.model, m.prompt_tokens, m.completion_tokens),
+      requests: m.requests
+    })).sort((a, b) => b.cost - a.cost);
+
+    if (modelCostChart) modelCostChart.destroy();
+    modelCostChart = new Chart(document.getElementById('modelCostChart'), {
+      type: 'bar',
+      data: {
+        labels: modelCosts.map(m => m.model),
+        datasets: [{
+          label: 'Cost ($)',
+          data: modelCosts.map(m => m.cost),
+          backgroundColor: COLORS.slice(0, modelCosts.length),
+          borderWidth: 0, borderRadius: 4
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false, indexAxis: 'y',
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              afterLabel: (ctx) => {
+                const m = modelCosts[ctx.dataIndex];
+                return `Requests: ${m.requests.toLocaleString()}`;
+              }
+            }
+          }
+        },
+        scales: {
+          x: { grid: { color: gridColor }, ticks: { color: tickColor, font: { size: 10 }, callback: v => '$' + v.toFixed(4) } },
+          y: { grid: { display: false }, ticks: { color: tickColor, font: { size: 10 } } }
+        }
+      }
+    });
+
+    // Summary table
+    tableData = daily.map(d => ({
+      period: d.period,
+      requests: d.requests,
+      tokens: d.tokens,
+      cost: estimateCostFromTokens(d.top_model || '', d.prompt_tokens, d.completion_tokens),
+      errors: d.errors,
+      avgLatency: Math.round(d.avg_latency_ms),
+      topModel: d.top_model || '-'
+    }));
+
+    const tbody = document.getElementById('summaryTable');
+    if (tableData.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" class="empty-state">No data for this period</td></tr>';
+    } else {
+      tbody.innerHTML = tableData.map(d => `<tr>
+        <td>${d.period}</td>
+        <td>${d.requests.toLocaleString()}</td>
+        <td>${d.tokens.toLocaleString()}</td>
+        <td><span class="cost-tag">${formatCost(d.cost)}</span></td>
+        <td>${d.errors}</td>
+        <td>${d.avgLatency}ms</td>
+        <td><span class="model-tag">${d.topModel}</span></td>
+      </tr>`).join('');
+    }
+
+  } catch (e) {
+    console.error('Failed to load analytics:', e);
+  }
+}
+
+function exportCSV() {
+  if (tableData.length === 0) return;
+  const headers = ['Period','Requests','Tokens','Est. Cost (USD)','Errors','Avg Latency (ms)','Top Model'];
+  const rows = tableData.map(d => [d.period, d.requests, d.tokens, d.cost.toFixed(4), d.errors, d.avgLatency, d.topModel]);
+  const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `llm-gateway-analytics-${currentDays}d.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+loadAnalytics(currentDays);
+</script>
+</body>
+</html>
