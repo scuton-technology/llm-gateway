@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LLM Gateway Dashboard</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: system-ui, -apple-system, sans-serif; background: #0a0a0a; color: #e5e5e5; padding: 2rem; }
+  h1 { font-size: 1.5rem; margin-bottom: 1.5rem; color: #fff; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+  .card { background: #1a1a1a; border: 1px solid #333; border-radius: 8px; padding: 1.25rem; }
+  .card .label { font-size: 0.75rem; color: #888; text-transform: uppercase; letter-spacing: 0.05em; }
+  .card .value { font-size: 1.75rem; font-weight: 700; margin-top: 0.25rem; }
+  .card .value.green { color: #22c55e; }
+  .card .value.blue { color: #3b82f6; }
+  .card .value.amber { color: #f59e0b; }
+  .card .value.red { color: #ef4444; }
+  table { width: 100%; border-collapse: collapse; background: #1a1a1a; border: 1px solid #333; border-radius: 8px; overflow: hidden; }
+  th, td { padding: 0.75rem 1rem; text-align: left; border-bottom: 1px solid #222; font-size: 0.875rem; }
+  th { background: #111; color: #888; font-weight: 600; text-transform: uppercase; font-size: 0.7rem; letter-spacing: 0.05em; }
+  tr:hover { background: #222; }
+  .badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 600; }
+  .badge-ok { background: #052e16; color: #22c55e; }
+  .badge-err { background: #450a0a; color: #ef4444; }
+  h2 { font-size: 1.1rem; margin-bottom: 1rem; color: #ccc; }
+  .refresh { float: right; background: #333; color: #fff; border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; font-size: 0.8rem; }
+  .refresh:hover { background: #444; }
+</style>
+</head>
+<body>
+  <h1>LLM Gateway <button class="refresh" onclick="loadData()">Refresh</button></h1>
+  <div class="grid" id="stats"></div>
+  <h2>Recent Requests</h2>
+  <table>
+    <thead>
+      <tr><th>Time</th><th>Model</th><th>Provider</th><th>Tokens</th><th>Latency</th><th>Status</th></tr>
+    </thead>
+    <tbody id="logs"></tbody>
+  </table>
+
+<script>
+async function loadData() {
+  try {
+    const [statsRes, logsRes] = await Promise.all([
+      fetch('/api/stats'),
+      fetch('/api/logs')
+    ]);
+    const stats = await statsRes.json();
+    const logs = await logsRes.json();
+
+    document.getElementById('stats').innerHTML = `
+      <div class="card"><div class="label">Requests (24h)</div><div class="value blue">${stats.total_requests}</div></div>
+      <div class="card"><div class="label">Total Tokens</div><div class="value green">${stats.total_tokens.toLocaleString()}</div></div>
+      <div class="card"><div class="label">Avg Latency</div><div class="value amber">${Math.round(stats.avg_latency_ms)}ms</div></div>
+      <div class="card"><div class="label">Errors</div><div class="value red">${stats.error_count}</div></div>
+    `;
+
+    const tbody = document.getElementById('logs');
+    tbody.innerHTML = (logs || []).map(l => `
+      <tr>
+        <td>${new Date(l.Timestamp).toLocaleTimeString()}</td>
+        <td>${l.Model}</td>
+        <td>${l.Provider}</td>
+        <td>${l.TotalTokens}</td>
+        <td>${l.LatencyMs}ms</td>
+        <td><span class="badge ${l.StatusCode < 400 ? 'badge-ok' : 'badge-err'}">${l.StatusCode}</span></td>
+      </tr>
+    `).join('');
+  } catch (e) {
+    console.error('Failed to load data:', e);
+  }
+}
+
+loadData();
+setInterval(loadData, 10000);
+</script>
+</body>
+</html>
