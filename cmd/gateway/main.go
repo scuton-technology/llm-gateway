@@ -4,7 +4,9 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 
+	"github.com/scuton-technology/llm-gateway/internal/admin"
 	"github.com/scuton-technology/llm-gateway/internal/middleware"
 	"github.com/scuton-technology/llm-gateway/internal/providers"
 	"github.com/scuton-technology/llm-gateway/internal/proxy"
@@ -26,15 +28,30 @@ func main() {
 	registry := providers.NewRegistry()
 	registerProviders(registry)
 
-	// Create router
+	// Load dashboard HTML
+	dashboardPath := envOr("DASHBOARD_PATH", findDashboard())
+	dashboardHTML, err := os.ReadFile(dashboardPath)
+	if err != nil {
+		log.Printf("warning: dashboard not found at %s, /admin will return 404", dashboardPath)
+		dashboardHTML = []byte("<html><body><h1>Dashboard not found</h1><p>Set DASHBOARD_PATH env var.</p></body></html>")
+	}
+
+	// Create handlers
 	router := proxy.NewRouter(registry, store)
+	adminHandler := admin.NewHandler(store, dashboardHTML)
 
 	// Setup HTTP mux
 	mux := http.NewServeMux()
+
+	// API endpoints
 	mux.HandleFunc("/v1/chat/completions", router.HandleChatCompletion)
 	mux.HandleFunc("/health", router.HandleHealth)
 	mux.HandleFunc("/api/stats", router.HandleStats)
 	mux.HandleFunc("/api/logs", router.HandleLogs)
+
+	// Admin dashboard
+	mux.HandleFunc("/admin", adminHandler.ServeDashboard)
+	mux.HandleFunc("/api/dashboard", adminHandler.HandleDashboardData)
 
 	// Apply middleware
 	handler := middleware.Logging(mux)
@@ -43,22 +60,40 @@ func main() {
 	log.Printf("Registered providers: %v", registry.ListProviders())
 	log.Printf("POST /v1/chat/completions — proxy endpoint")
 	log.Printf("GET  /health              — health check")
-	log.Printf("GET  /api/stats           — usage statistics")
-	log.Printf("GET  /api/logs            — recent request logs")
+	log.Printf("GET  /admin               — dashboard")
 
 	if err := http.ListenAndServe(":"+port, handler); err != nil {
 		log.Fatalf("server failed: %v", err)
 	}
 }
 
+// findDashboard looks for dashboard.html relative to the executable or CWD.
+func findDashboard() string {
+	// Try relative to CWD
+	candidates := []string{
+		"web/dashboard.html",
+		"../../web/dashboard.html",
+	}
+
+	// Try relative to executable
+	if ex, err := os.Executable(); err == nil {
+		candidates = append(candidates, filepath.Join(filepath.Dir(ex), "web", "dashboard.html"))
+	}
+
+	for _, p := range candidates {
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+	return "web/dashboard.html"
+}
+
 func registerProviders(registry *providers.Registry) {
-	// Anthropic
 	if key := os.Getenv("ANTHROPIC_API_KEY"); key != "" {
 		registry.Register(providers.NewAnthropicProvider(key))
 		log.Println("  + anthropic (claude-opus-4, claude-sonnet-4, claude-haiku-4)")
 	}
 
-	// OpenAI
 	if key := os.Getenv("OPENAI_API_KEY"); key != "" {
 		registry.Register(providers.NewOpenAIProvider(providers.OpenAIConfig{
 			Name:    "openai",
@@ -69,13 +104,11 @@ func registerProviders(registry *providers.Registry) {
 		log.Println("  + openai (gpt-4o, gpt-4o-mini, o1, o3-mini)")
 	}
 
-	// Google Gemini
 	if key := os.Getenv("GOOGLE_API_KEY"); key != "" {
 		registry.Register(providers.NewGeminiProvider(key))
 		log.Println("  + google (gemini-2.0-flash, gemini-1.5-pro)")
 	}
 
-	// Groq (OpenAI-compatible)
 	if key := os.Getenv("GROQ_API_KEY"); key != "" {
 		registry.Register(providers.NewOpenAIProvider(providers.OpenAIConfig{
 			Name:    "groq",
@@ -86,31 +119,26 @@ func registerProviders(registry *providers.Registry) {
 		log.Println("  + groq (llama-3.3-70b, mixtral-8x7b)")
 	}
 
-	// Mistral
 	if key := os.Getenv("MISTRAL_API_KEY"); key != "" {
 		registry.Register(providers.NewMistralProvider(key))
 		log.Println("  + mistral (mistral-large, mistral-small, codestral)")
 	}
 
-	// Cohere
 	if key := os.Getenv("COHERE_API_KEY"); key != "" {
 		registry.Register(providers.NewCohereProvider(key))
 		log.Println("  + cohere (command-r-plus, command-r)")
 	}
 
-	// xAI
 	if key := os.Getenv("XAI_API_KEY"); key != "" {
 		registry.Register(providers.NewXAIProvider(key))
 		log.Println("  + xai (grok-2, grok-2-mini)")
 	}
 
-	// Perplexity
 	if key := os.Getenv("PERPLEXITY_API_KEY"); key != "" {
 		registry.Register(providers.NewPerplexityProvider(key))
 		log.Println("  + perplexity (sonar-large, sonar-small)")
 	}
 
-	// Together AI (OpenAI-compatible)
 	if key := os.Getenv("TOGETHER_API_KEY"); key != "" {
 		registry.Register(providers.NewOpenAIProvider(providers.OpenAIConfig{
 			Name:    "together",
@@ -121,7 +149,6 @@ func registerProviders(registry *providers.Registry) {
 		log.Println("  + together (meta-llama/Llama-3-70b)")
 	}
 
-	// Ollama (local, OpenAI-compatible)
 	ollamaURL := envOr("OLLAMA_BASE_URL", "http://localhost:11434")
 	if os.Getenv("OLLAMA_ENABLED") == "true" {
 		registry.Register(providers.NewOpenAIProvider(providers.OpenAIConfig{
@@ -132,7 +159,6 @@ func registerProviders(registry *providers.Registry) {
 		log.Println("  + ollama (local)")
 	}
 
-	// LM Studio (local, OpenAI-compatible)
 	lmStudioURL := envOr("LMSTUDIO_BASE_URL", "http://localhost:1234")
 	if os.Getenv("LMSTUDIO_ENABLED") == "true" {
 		registry.Register(providers.NewOpenAIProvider(providers.OpenAIConfig{
@@ -143,7 +169,6 @@ func registerProviders(registry *providers.Registry) {
 		log.Println("  + lmstudio (local)")
 	}
 
-	// vLLM (local, OpenAI-compatible)
 	vllmURL := envOr("VLLM_BASE_URL", "http://localhost:8000")
 	if os.Getenv("VLLM_ENABLED") == "true" {
 		registry.Register(providers.NewOpenAIProvider(providers.OpenAIConfig{

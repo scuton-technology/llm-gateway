@@ -10,13 +10,21 @@ import (
 )
 
 type Handler struct {
-	store *storage.Store
+	store         *storage.Store
+	dashboardHTML []byte
 }
 
-func NewHandler(store *storage.Store) *Handler {
-	return &Handler{store: store}
+func NewHandler(store *storage.Store, dashboardHTML []byte) *Handler {
+	return &Handler{store: store, dashboardHTML: dashboardHTML}
 }
 
+// ServeDashboard serves the dashboard HTML page.
+func (h *Handler) ServeDashboard(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Write(h.dashboardHTML)
+}
+
+// HandleDashboardData returns JSON data for the dashboard.
 func (h *Handler) HandleDashboardData(w http.ResponseWriter, r *http.Request) {
 	stats, err := h.store.GetStats(24 * time.Hour)
 	if err != nil {
@@ -32,8 +40,8 @@ func (h *Handler) HandleDashboardData(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{
-		"stats":        stats,
-		"recent_logs":  logs,
-		"cost_table":   middleware.CostPerMillionTokens,
+		"stats":       stats,
+		"recent_logs": logs,
+		"cost_table":  middleware.CostPerMillionTokens,
 	})
 }

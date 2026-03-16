@@ -56,6 +56,13 @@ func (rt *Router) HandleChatCompletion(w http.ResponseWriter, r *http.Request) {
 	// Resolve provider
 	provider, err := rt.registry.Resolve(req.Model)
 	if err != nil {
+		rt.logRequest(storage.RequestLog{
+			Model:        req.Model,
+			Provider:     "unknown",
+			StatusCode:   http.StatusBadRequest,
+			ErrorMessage: err.Error(),
+			ClientIP:     clientIP(r),
+		})
 		writeError(w, http.StatusBadRequest, err.Error(), "model_not_found")
 		return
 	}

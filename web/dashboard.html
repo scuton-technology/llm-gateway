@@ -4,42 +4,132 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>LLM Gateway Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: system-ui, -apple-system, sans-serif; background: #0a0a0a; color: #e5e5e5; padding: 2rem; }
-  h1 { font-size: 1.5rem; margin-bottom: 1.5rem; color: #fff; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
-  .card { background: #1a1a1a; border: 1px solid #333; border-radius: 8px; padding: 1.25rem; }
-  .card .label { font-size: 0.75rem; color: #888; text-transform: uppercase; letter-spacing: 0.05em; }
-  .card .value { font-size: 1.75rem; font-weight: 700; margin-top: 0.25rem; }
-  .card .value.green { color: #22c55e; }
-  .card .value.blue { color: #3b82f6; }
-  .card .value.amber { color: #f59e0b; }
-  .card .value.red { color: #ef4444; }
-  table { width: 100%; border-collapse: collapse; background: #1a1a1a; border: 1px solid #333; border-radius: 8px; overflow: hidden; }
-  th, td { padding: 0.75rem 1rem; text-align: left; border-bottom: 1px solid #222; font-size: 0.875rem; }
-  th { background: #111; color: #888; font-weight: 600; text-transform: uppercase; font-size: 0.7rem; letter-spacing: 0.05em; }
-  tr:hover { background: #222; }
-  .badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 600; }
+  body { font-family: system-ui, -apple-system, sans-serif; background: #09090b; color: #e5e5e5; }
+  .container { max-width: 1280px; margin: 0 auto; padding: 1.5rem; }
+
+  /* Header */
+  .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
+  .header h1 { font-size: 1.4rem; color: #fff; font-weight: 700; }
+  .header h1 span { color: #6366f1; }
+  .header-actions { display: flex; gap: 0.5rem; align-items: center; }
+  .live-dot { width: 8px; height: 8px; background: #22c55e; border-radius: 50%; animation: pulse 2s infinite; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+  .btn { background: #1e1e2e; color: #a1a1aa; border: 1px solid #27272a; padding: 0.4rem 0.75rem; border-radius: 6px; cursor: pointer; font-size: 0.8rem; transition: all 0.15s; }
+  .btn:hover { background: #27272a; color: #fff; }
+
+  /* Stat cards */
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem; margin-bottom: 1.5rem; }
+  .stat-card { background: #111113; border: 1px solid #1e1e22; border-radius: 10px; padding: 1rem 1.25rem; }
+  .stat-label { font-size: 0.7rem; color: #71717a; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
+  .stat-value { font-size: 1.6rem; font-weight: 800; margin-top: 0.15rem; font-variant-numeric: tabular-nums; }
+  .stat-value.indigo { color: #818cf8; }
+  .stat-value.emerald { color: #34d399; }
+  .stat-value.amber { color: #fbbf24; }
+  .stat-value.rose { color: #fb7185; }
+  .stat-value.cyan { color: #22d3ee; }
+  .stat-sub { font-size: 0.7rem; color: #52525b; margin-top: 0.15rem; }
+
+  /* Charts */
+  .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 1.5rem; }
+  .chart-card { background: #111113; border: 1px solid #1e1e22; border-radius: 10px; padding: 1.25rem; }
+  .chart-title { font-size: 0.8rem; color: #a1a1aa; font-weight: 600; margin-bottom: 0.75rem; }
+  .chart-container { position: relative; height: 220px; }
+
+  /* Table */
+  .table-card { background: #111113; border: 1px solid #1e1e22; border-radius: 10px; overflow: hidden; }
+  .table-header { display: flex; justify-content: space-between; align-items: center; padding: 1rem 1.25rem 0.75rem; }
+  .table-header h2 { font-size: 0.9rem; color: #e5e5e5; font-weight: 600; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { padding: 0.6rem 1.25rem; text-align: left; font-size: 0.8rem; }
+  th { color: #52525b; font-weight: 600; text-transform: uppercase; font-size: 0.65rem; letter-spacing: 0.06em; border-bottom: 1px solid #1e1e22; }
+  td { border-bottom: 1px solid #111118; color: #a1a1aa; }
+  tr:hover td { background: #18181b; }
+  .badge { display: inline-block; padding: 0.1rem 0.45rem; border-radius: 4px; font-size: 0.7rem; font-weight: 700; }
   .badge-ok { background: #052e16; color: #22c55e; }
-  .badge-err { background: #450a0a; color: #ef4444; }
-  h2 { font-size: 1.1rem; margin-bottom: 1rem; color: #ccc; }
-  .refresh { float: right; background: #333; color: #fff; border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; font-size: 0.8rem; }
-  .refresh:hover { background: #444; }
+  .badge-err { background: #450a0a; color: #fb7185; }
+  .model-tag { color: #818cf8; font-weight: 600; }
+  .provider-tag { color: #71717a; font-size: 0.7rem; }
+  .cost-tag { color: #34d399; font-weight: 600; }
+  .empty-state { text-align: center; padding: 3rem; color: #3f3f46; }
+
+  @media (max-width: 768px) {
+    .charts-grid { grid-template-columns: 1fr; }
+    .stats-grid { grid-template-columns: repeat(2, 1fr); }
+  }
 </style>
 </head>
 <body>
-  <h1>LLM Gateway <button class="refresh" onclick="loadData()">Refresh</button></h1>
-  <div class="grid" id="stats"></div>
-  <h2>Recent Requests</h2>
-  <table>
-    <thead>
-      <tr><th>Time</th><th>Model</th><th>Provider</th><th>Tokens</th><th>Latency</th><th>Status</th></tr>
-    </thead>
-    <tbody id="logs"></tbody>
-  </table>
+<div class="container">
+  <div class="header">
+    <h1><span>LLM</span> Gateway</h1>
+    <div class="header-actions">
+      <div class="live-dot"></div>
+      <span style="font-size:0.75rem;color:#52525b;">Auto-refresh 10s</span>
+      <button class="btn" onclick="loadData()">Refresh</button>
+    </div>
+  </div>
+
+  <div class="stats-grid" id="stats">
+    <div class="stat-card"><div class="stat-label">Loading...</div></div>
+  </div>
+
+  <div class="charts-grid">
+    <div class="chart-card">
+      <div class="chart-title">Requests by Provider</div>
+      <div class="chart-container"><canvas id="providerChart"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">Cost by Model (est. USD)</div>
+      <div class="chart-container"><canvas id="costChart"></canvas></div>
+    </div>
+  </div>
+
+  <div class="table-card">
+    <div class="table-header">
+      <h2>Recent Requests</h2>
+      <span style="font-size:0.7rem;color:#52525b;" id="logCount">0 entries</span>
+    </div>
+    <table>
+      <thead>
+        <tr><th>Time</th><th>Model</th><th>Provider</th><th>Tokens</th><th>Cost</th><th>Latency</th><th>Status</th></tr>
+      </thead>
+      <tbody id="logs"><tr><td colspan="7" class="empty-state">No requests yet</td></tr></tbody>
+    </table>
+  </div>
+</div>
 
 <script>
+const COLORS = ['#818cf8','#34d399','#fbbf24','#fb7185','#22d3ee','#a78bfa','#f97316','#84cc16','#e879f9'];
+let providerChart = null;
+let costChart = null;
+
+// Cost table (synced with Go middleware/cost.go)
+const COSTS = {
+  'claude-opus-4': [15,75], 'claude-sonnet-4': [3,15], 'claude-haiku-4': [0.25,1.25],
+  'gpt-4o': [2.5,10], 'gpt-4o-mini': [0.15,0.6], 'o1': [15,60], 'o3-mini': [1.1,4.4],
+  'gemini-2.0-flash': [0.1,0.4], 'gemini-1.5-pro': [1.25,5],
+  'llama-3.3-70b-versatile': [0.59,0.79], 'mixtral-8x7b-32768': [0.24,0.24],
+  'mistral-large-latest': [2,6], 'mistral-small-latest': [0.2,0.6], 'codestral-latest': [0.3,0.9],
+  'command-r-plus': [2.5,10], 'command-r': [0.15,0.6],
+  'grok-2': [2,10], 'grok-2-mini': [0.2,1],
+  'sonar-large': [1,1], 'sonar-small': [0.2,0.2],
+};
+
+function estimateCost(model, input, output) {
+  const p = COSTS[model];
+  if (!p) return 0;
+  return (input / 1e6 * p[0]) + (output / 1e6 * p[1]);
+}
+
+function formatCost(usd) {
+  if (usd === 0) return '-';
+  if (usd < 0.001) return '<$0.001';
+  return '$' + usd.toFixed(4);
+}
+
 async function loadData() {
   try {
     const [statsRes, logsRes] = await Promise.all([
@@ -49,26 +139,114 @@ async function loadData() {
     const stats = await statsRes.json();
     const logs = await logsRes.json();
 
+    // Calculate total cost from logs
+    let totalCost = 0;
+    (logs || []).forEach(l => {
+      totalCost += estimateCost(l.Model, l.PromptTokens, l.CompletionTokens);
+    });
+
+    // Stat cards
     document.getElementById('stats').innerHTML = `
-      <div class="card"><div class="label">Requests (24h)</div><div class="value blue">${stats.total_requests}</div></div>
-      <div class="card"><div class="label">Total Tokens</div><div class="value green">${stats.total_tokens.toLocaleString()}</div></div>
-      <div class="card"><div class="label">Avg Latency</div><div class="value amber">${Math.round(stats.avg_latency_ms)}ms</div></div>
-      <div class="card"><div class="label">Errors</div><div class="value red">${stats.error_count}</div></div>
+      <div class="stat-card">
+        <div class="stat-label">Requests (24h)</div>
+        <div class="stat-value indigo">${stats.total_requests.toLocaleString()}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Total Tokens</div>
+        <div class="stat-value emerald">${stats.total_tokens.toLocaleString()}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Avg Latency</div>
+        <div class="stat-value amber">${Math.round(stats.avg_latency_ms)}ms</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Errors</div>
+        <div class="stat-value rose">${stats.error_count}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Est. Cost (24h)</div>
+        <div class="stat-value cyan">${formatCost(totalCost)}</div>
+      </div>
     `;
 
+    // Provider pie chart
+    const providerData = stats.provider_breakdown || {};
+    const providerLabels = Object.keys(providerData);
+    const providerValues = Object.values(providerData);
+
+    if (providerChart) providerChart.destroy();
+    providerChart = new Chart(document.getElementById('providerChart'), {
+      type: 'doughnut',
+      data: {
+        labels: providerLabels.length ? providerLabels : ['No data'],
+        datasets: [{
+          data: providerValues.length ? providerValues : [1],
+          backgroundColor: providerLabels.length ? COLORS.slice(0, providerLabels.length) : ['#27272a'],
+          borderWidth: 0,
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'right', labels: { color: '#71717a', font: { size: 11 }, padding: 12, usePointStyle: true, pointStyleWidth: 8 } }
+        },
+        cutout: '65%',
+      }
+    });
+
+    // Cost bar chart by model
+    const modelCosts = {};
+    (logs || []).forEach(l => {
+      const cost = estimateCost(l.Model, l.PromptTokens, l.CompletionTokens);
+      if (cost > 0) modelCosts[l.Model] = (modelCosts[l.Model] || 0) + cost;
+    });
+    const costLabels = Object.keys(modelCosts).sort((a,b) => modelCosts[b] - modelCosts[a]);
+    const costValues = costLabels.map(k => modelCosts[k]);
+
+    if (costChart) costChart.destroy();
+    costChart = new Chart(document.getElementById('costChart'), {
+      type: 'bar',
+      data: {
+        labels: costLabels.length ? costLabels : ['No data'],
+        datasets: [{
+          data: costValues.length ? costValues : [0],
+          backgroundColor: costLabels.length ? COLORS.slice(0, costLabels.length) : ['#27272a'],
+          borderWidth: 0, borderRadius: 4,
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false, indexAxis: 'y',
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { color: '#1e1e22' }, ticks: { color: '#52525b', font: { size: 10 }, callback: v => '$' + v.toFixed(4) } },
+          y: { grid: { display: false }, ticks: { color: '#a1a1aa', font: { size: 11 } } }
+        }
+      }
+    });
+
+    // Logs table
     const tbody = document.getElementById('logs');
-    tbody.innerHTML = (logs || []).map(l => `
-      <tr>
-        <td>${new Date(l.Timestamp).toLocaleTimeString()}</td>
-        <td>${l.Model}</td>
-        <td>${l.Provider}</td>
-        <td>${l.TotalTokens}</td>
-        <td>${l.LatencyMs}ms</td>
-        <td><span class="badge ${l.StatusCode < 400 ? 'badge-ok' : 'badge-err'}">${l.StatusCode}</span></td>
-      </tr>
-    `).join('');
+    const logArr = logs || [];
+    document.getElementById('logCount').textContent = logArr.length + ' entries';
+
+    if (logArr.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" class="empty-state">No requests yet</td></tr>';
+    } else {
+      tbody.innerHTML = logArr.map(l => {
+        const cost = estimateCost(l.Model, l.PromptTokens, l.CompletionTokens);
+        return `<tr>
+          <td>${new Date(l.Timestamp).toLocaleTimeString()}</td>
+          <td><span class="model-tag">${l.Model}</span></td>
+          <td><span class="provider-tag">${l.Provider}</span></td>
+          <td>${l.TotalTokens.toLocaleString()}</td>
+          <td><span class="cost-tag">${formatCost(cost)}</span></td>
+          <td>${l.LatencyMs}ms</td>
+          <td><span class="badge ${l.StatusCode < 400 ? 'badge-ok' : 'badge-err'}">${l.StatusCode}</span></td>
+        </tr>`;
+      }).join('');
+    }
   } catch (e) {
-    console.error('Failed to load data:', e);
+    console.error('Failed to load dashboard data:', e);
   }
 }
 
