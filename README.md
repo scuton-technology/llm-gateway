@@ -1,136 +1,236 @@
-# LLM Gateway
+<p align="center">
+  <h1 align="center">LLM Gateway</h1>
+  <p align="center">
+    Universal LLM proxy &mdash; one OpenAI-compatible API for <strong>12 providers</strong>.<br/>
+    Single Go binary. SSE streaming. Admin dashboard. Zero config.
+  </p>
+</p>
 
-Universal LLM proxy. Single Go binary that translates OpenAI-compatible `POST /v1/chat/completions` requests to **12 providers**.
+<p align="center">
+  <a href="https://hub.docker.com/r/scutontech/llm-gateway"><img src="https://img.shields.io/docker/pulls/scutontech/llm-gateway?style=flat-square&logo=docker" alt="Docker Pulls"></a>
+  <a href="https://github.com/scuton-technology/llm-gateway/releases"><img src="https://img.shields.io/github/v/release/scuton-technology/llm-gateway?style=flat-square" alt="Release"></a>
+  <a href="https://github.com/scuton-technology/llm-gateway/blob/main/LICENSE"><img src="https://img.shields.io/github/license/scuton-technology/llm-gateway?style=flat-square" alt="License"></a>
+  <img src="https://img.shields.io/badge/go-1.25-00ADD8?style=flat-square&logo=go" alt="Go 1.25">
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/dashboard-dark.png" alt="LLM Gateway Dashboard" width="800">
+</p>
 
 ```
-curl → LLM Gateway → Anthropic / OpenAI / Gemini / Groq / Mistral / Cohere / xAI / Perplexity / Together / Ollama / LM Studio / vLLM
+curl http://localhost:8080/v1/chat/completions → Anthropic / OpenAI / Gemini / Groq / Mistral / Cohere / xAI / Perplexity / Together / Ollama / LM Studio / vLLM
 ```
 
-## Features
-
-- **One API, all providers** — Send OpenAI-format requests, gateway translates to each provider's native format
-- **Auto-routing** — Model name determines provider (`claude-*` → Anthropic, `gpt-*` → OpenAI, `gemini-*` → Google, etc.)
-- **SQLite request logging** — Every request logged with tokens, latency, cost
-- **Admin dashboard** — Real-time Chart.js dashboard at `/admin`
-- **Cost estimation** — Per-model pricing for all supported models
-- **Rate limiting** — IP-based token bucket
-- **Zero dependencies** — Single binary, no external services needed (except SQLite)
-
-## Supported Providers
-
-| Provider | Models | Adapter |
-|----------|--------|---------|
-| **Anthropic** | claude-opus-4, claude-sonnet-4, claude-haiku-4 | Native Messages API |
-| **OpenAI** | gpt-4o, gpt-4o-mini, o1, o3-mini | Native |
-| **Google** | gemini-2.0-flash, gemini-1.5-pro | Native Gemini API |
-| **Groq** | llama-3.3-70b, mixtral-8x7b | OpenAI-compatible |
-| **Mistral** | mistral-large, mistral-small, codestral | OpenAI-compatible |
-| **Cohere** | command-r-plus, command-r | Native Chat API |
-| **xAI** | grok-2, grok-2-mini | OpenAI-compatible |
-| **Perplexity** | sonar-large, sonar-small | OpenAI-compatible |
-| **Together AI** | meta-llama/Llama-3-70b, etc. | OpenAI-compatible |
-| **Ollama** | llama3, mistral, codellama, phi3 | OpenAI-compatible (local) |
-| **LM Studio** | Any loaded model | OpenAI-compatible (local) |
-| **vLLM** | Any served model | OpenAI-compatible (local) |
+---
 
 ## Quick Start
 
+**Docker (recommended):**
+
 ```bash
-# Clone
+docker run -p 8080:8080 -v gateway-data:/data scutontech/llm-gateway
+```
+
+Open `http://localhost:8080` &rarr; set admin password &rarr; add API keys in Settings &rarr; done.
+
+**Binary:**
+
+```bash
 git clone https://github.com/scuton-technology/llm-gateway.git
 cd llm-gateway
-
-# Configure
-cp .env.example .env
-# Edit .env — add at least one API key
-
-# Run
-go run ./cmd/gateway
-
-# Or build & run
 go build -o llm-gateway ./cmd/gateway
 ./llm-gateway
 ```
 
-## Docker
-
-```bash
-cp .env.example .env
-# Edit .env with your API keys
-
-docker compose up -d
-```
+---
 
 ## Usage
 
-Send standard OpenAI chat completion requests:
+Send standard OpenAI-format requests. The gateway routes to the right provider automatically.
+
+**Claude (Anthropic):**
 
 ```bash
-# Anthropic
-curl -X POST http://localhost:8080/v1/chat/completions \
+curl http://localhost:8080/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "claude-sonnet-4",
+    "model": "claude-sonnet-4-6",
     "messages": [{"role": "user", "content": "Hello!"}]
   }'
+```
 
-# OpenAI
-curl -X POST http://localhost:8080/v1/chat/completions \
+**GPT-4o (OpenAI):**
+
+```bash
+curl http://localhost:8080/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "model": "gpt-4o",
     "messages": [{"role": "user", "content": "Hello!"}]
   }'
+```
 
-# Google Gemini
-curl -X POST http://localhost:8080/v1/chat/completions \
+**Ollama (local):**
+
+```bash
+curl http://localhost:8080/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "gemini-2.0-flash",
+    "model": "llama3",
     "messages": [{"role": "user", "content": "Hello!"}]
   }'
 ```
 
-The gateway automatically routes to the correct provider based on the model name.
+**SSE Streaming:**
 
-## Endpoints
+```bash
+curl -N http://localhost:8080/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "claude-sonnet-4-6",
+    "stream": true,
+    "messages": [{"role": "user", "content": "Write a haiku about coding"}]
+  }'
+```
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `POST` | `/v1/chat/completions` | Proxy endpoint (OpenAI-compatible) |
-| `GET` | `/health` | Health check + registered providers |
-| `GET` | `/admin` | Dashboard UI |
-| `GET` | `/api/stats` | Usage statistics (JSON) |
-| `GET` | `/api/logs` | Recent request logs (JSON) |
-| `GET` | `/api/dashboard` | Combined dashboard data (JSON) |
+```
+data: {"id":"msg_01X...","object":"chat.completion.chunk","choices":[{"delta":{"role":"assistant"}}]}
+data: {"id":"msg_01X...","object":"chat.completion.chunk","choices":[{"delta":{"content":"Fingers "}}]}
+data: {"id":"msg_01X...","object":"chat.completion.chunk","choices":[{"delta":{"content":"dance on keys"}}]}
+data: [DONE]
+```
 
-## Response Headers
+All providers stream in **OpenAI SSE format** &mdash; even Anthropic and Gemini are translated on the fly.
 
-Every proxied response includes:
+---
 
-- `X-LLM-Provider` — Which provider handled the request
-- `X-LLM-Latency-Ms` — End-to-end latency in milliseconds
+## Supported Providers
 
-## Environment Variables
+| Provider | Models | Format | Streaming |
+|----------|--------|--------|-----------|
+| **Anthropic** | claude-sonnet-4-6, claude-opus-4-6, claude-haiku-4-5, claude-3-haiku | Messages API &rarr; OpenAI | Anthropic SSE &rarr; OpenAI SSE |
+| **OpenAI** | gpt-4o, gpt-4o-mini, o1, o3-mini | Native | Pass-through |
+| **Google** | gemini-2.0-flash, gemini-1.5-pro | Gemini API &rarr; OpenAI | Gemini SSE &rarr; OpenAI SSE |
+| **Groq** | llama-3.3-70b, mixtral-8x7b | OpenAI-compatible | Pass-through |
+| **Mistral** | mistral-large, mistral-small, codestral | OpenAI-compatible | Pass-through |
+| **Cohere** | command-r-plus, command-r | Chat API &rarr; OpenAI | &mdash; |
+| **xAI** | grok-2, grok-2-mini | OpenAI-compatible | Pass-through |
+| **Perplexity** | sonar-large, sonar-small | OpenAI-compatible | Pass-through |
+| **Together AI** | meta-llama/Llama-3-70b, etc. | OpenAI-compatible | Pass-through |
+| **Ollama** | llama3, mistral, codellama, phi3 | OpenAI-compatible (local) | Pass-through |
+| **LM Studio** | Any loaded model | OpenAI-compatible (local) | Pass-through |
+| **vLLM** | Any served model | OpenAI-compatible (local) | Pass-through |
+
+Model routing is automatic by prefix: `claude-*` &rarr; Anthropic, `gpt-*` &rarr; OpenAI, `gemini-*` &rarr; Google, etc.
+
+---
+
+## Features
+
+### Admin Dashboard
+
+Real-time metrics with Chart.js: requests, tokens, latency, cost, provider breakdown.
+
+<p align="center">
+  <img src="docs/screenshots/dashboard-dark.png" alt="Dashboard" width="700">
+</p>
+
+### Spending Analytics
+
+Historical cost tracking with timeline charts, provider stacked bars, model ranking, and CSV export.
+
+<p align="center">
+  <img src="docs/screenshots/analytics-dark.png" alt="Analytics" width="700">
+</p>
+
+### Provider Settings
+
+Add/test/delete API keys per provider via the web UI. Priority: `.env` &rarr; SQLite &rarr; empty.
+
+<p align="center">
+  <img src="docs/screenshots/settings-dark.png" alt="Settings" width="700">
+</p>
+
+### SSE Streaming
+
+All 11 streaming-capable providers emit **OpenAI-format SSE chunks**. Anthropic and Gemini streams are converted on the fly &mdash; your client code doesn't need to care which provider is behind the model.
+
+### Admin Auth
+
+- bcrypt password hashing (cost 12)
+- HttpOnly session cookies (24h expiry)
+- Brute force protection (5 attempts &rarr; 15 min lockout)
+- First-run setup page at `/admin/setup`
+- `--reset-password` CLI flag
+
+### Dark / Light Mode
+
+All pages support dark and light themes with system preference detection and localStorage persistence.
+
+---
+
+## Why LLM Gateway?
+
+| | **LLM Gateway** | **LiteLLM** |
+|---|---|---|
+| **Language** | Go (single static binary) | Python |
+| **Install size** | ~15 MB Docker image | ~500 MB+ with dependencies |
+| **Startup time** | < 100ms | Several seconds |
+| **Memory** | ~10 MB idle | ~100 MB+ idle |
+| **Dependencies** | Zero (embedded SQLite) | pip, PostgreSQL/Redis optional |
+| **Config** | Web UI + `.env` | YAML config files |
+| **Dashboard** | Built-in (Chart.js) | Separate UI package |
+| **Streaming** | Native SSE pass-through | Async Python generators |
+| **Deployment** | `docker run` one-liner | Docker Compose + config |
+| **Best for** | Self-hosted, low-resource, edge | Enterprise, complex routing |
+
+LLM Gateway is designed for developers who want a **dead-simple, lightweight proxy** they can run anywhere &mdash; from a $5 VPS to a Raspberry Pi. No YAML configs, no Python virtualenvs, no external databases.
+
+---
+
+## API Endpoints
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `POST` | `/v1/chat/completions` | No | Proxy endpoint (OpenAI-compatible) |
+| `GET` | `/health` | No | Health check + registered providers |
+| `GET` | `/admin` | Yes | Dashboard UI |
+| `GET` | `/admin/analytics` | Yes | Spending analytics UI |
+| `GET` | `/admin/settings` | Yes | Provider settings UI |
+| `GET` | `/admin/login` | No | Login page |
+| `GET` | `/admin/setup` | No | First-run password setup |
+| `GET` | `/api/dashboard` | Yes | Dashboard data (JSON) |
+| `GET` | `/api/stats/daily` | Yes | Daily statistics |
+| `GET` | `/api/stats/providers` | Yes | Provider breakdown |
+| `GET` | `/api/stats/models` | Yes | Model cost ranking |
+
+Every proxied response includes headers:
+- `X-LLM-Provider` &mdash; which provider handled the request
+- `X-LLM-Latency-Ms` &mdash; end-to-end latency in milliseconds
+
+---
+
+## Configuration
+
+### Environment Variables
 
 ```bash
 # Server
 PORT=8080              # Server port (default: 8080)
 DB_PATH=gateway.db     # SQLite database path
-DASHBOARD_PATH=...     # Custom dashboard.html path
 
-# Cloud Providers — set API key to enable
-ANTHROPIC_API_KEY=
-OPENAI_API_KEY=
-GOOGLE_API_KEY=
-GROQ_API_KEY=
-MISTRAL_API_KEY=
-COHERE_API_KEY=
-XAI_API_KEY=
-PERPLEXITY_API_KEY=
-TOGETHER_API_KEY=
+# Cloud Providers (set API key to enable)
+ANTHROPIC_API_KEY=sk-ant-...
+OPENAI_API_KEY=sk-...
+GOOGLE_API_KEY=AIza...
+GROQ_API_KEY=gsk_...
+MISTRAL_API_KEY=...
+COHERE_API_KEY=...
+XAI_API_KEY=xai-...
+PERPLEXITY_API_KEY=pplx-...
+TOGETHER_API_KEY=...
 
-# Local Providers — set ENABLED=true to activate
+# Local Providers (set ENABLED=true to activate)
 OLLAMA_ENABLED=false
 OLLAMA_BASE_URL=http://localhost:11434
 LMSTUDIO_ENABLED=false
@@ -139,48 +239,127 @@ VLLM_ENABLED=false
 VLLM_BASE_URL=http://localhost:8000
 ```
 
-## Model Routing
+### Web UI
 
-The gateway resolves providers by model name prefix:
+You can also manage API keys from the **Settings** page at `/admin/settings`. Keys saved via the UI are stored in SQLite. Priority order: `.env` > SQLite > empty.
 
-| Prefix | Provider |
-|--------|----------|
-| `claude-*` | Anthropic |
-| `gpt-*`, `o1`, `o3-*` | OpenAI |
-| `gemini-*` | Google |
-| `llama*`, `mixtral-*` | Groq |
-| `mistral-*` | Mistral |
-| `command-*` | Cohere |
-| `grok-*` | xAI |
-| `sonar-*` | Perplexity |
-| `*/` (contains slash) | Together AI |
+### Docker Compose
+
+```yaml
+services:
+  llm-gateway:
+    image: scutontech/llm-gateway:latest
+    ports:
+      - "8080:8080"
+    volumes:
+      - gateway-data:/data
+    environment:
+      - ANTHROPIC_API_KEY=sk-ant-...
+      - OPENAI_API_KEY=sk-...
+
+volumes:
+  gateway-data:
+```
+
+### Password Reset
+
+```bash
+# Reset admin password (then visit /admin/setup)
+./llm-gateway --reset-password
+
+# Docker
+docker exec <container> llm-gateway --reset-password
+```
+
+---
 
 ## Architecture
 
 ```
-cmd/gateway/main.go          HTTP server, provider registration
+cmd/gateway/main.go              HTTP server, provider registration, auth setup
 internal/
   providers/
-    interface.go              Provider interface + OpenAI types
-    openai.go                 OpenAI + Groq + Ollama + LM Studio + vLLM
-    anthropic.go              Anthropic Messages API translation
-    gemini.go                 Google Gemini API translation
-    mistral.go                Mistral (OpenAI-compat, own endpoint)
-    cohere.go                 Cohere Chat API translation
-    xai.go                    xAI Grok (OpenAI-compat, own endpoint)
-    perplexity.go             Perplexity Sonar (OpenAI-compat)
-    together.go               Together AI (uses OpenAI adapter)
-    registry.go               Model → provider resolution
-  proxy/router.go             Request routing + response formatting
-  middleware/
-    logging.go                HTTP request logging
-    ratelimit.go              IP-based rate limiter
-    cost.go                   Per-model cost estimation
-  storage/sqlite.go           SQLite logging + statistics
-  admin/handler.go            Dashboard data API
-web/dashboard.html            Admin dashboard (Chart.js)
+    interface.go                  Provider + StreamProvider interfaces
+    streaming.go                  SSE helpers, OpenAI passthrough stream
+    openai.go                     OpenAI + Groq + Ollama + LM Studio + vLLM + Together
+    anthropic.go                  Anthropic Messages API + stream conversion
+    gemini.go                     Google Gemini API + stream conversion
+    mistral.go                    Mistral (OpenAI-compat)
+    cohere.go                     Cohere Chat API translation
+    xai.go                        xAI Grok (OpenAI-compat)
+    perplexity.go                 Perplexity Sonar (OpenAI-compat)
+    registry.go                   Model -> provider resolution
+  proxy/router.go                 Request routing, streaming dispatch
+  admin/
+    handler.go                    Dashboard + settings + analytics APIs
+    auth.go                       Login, setup, session management
+  middleware/logging.go           HTTP request logging
+  storage/sqlite.go               SQLite: logs, settings, auth, analytics
+web/
+  dashboard.html                  Admin dashboard (Chart.js)
+  analytics.html                  Spending analytics (Chart.js)
+  settings.html                   Provider settings UI
+  login.html                      Login page
+  setup.html                      First-run setup page
 ```
+
+---
+
+## OpenAI SDK Compatibility
+
+LLM Gateway works as a drop-in replacement with any OpenAI SDK:
+
+**Python:**
+
+```python
+from openai import OpenAI
+
+client = OpenAI(base_url="http://localhost:8080/v1", api_key="unused")
+
+# Use any provider through the same client
+response = client.chat.completions.create(
+    model="claude-sonnet-4-6",  # Routes to Anthropic
+    messages=[{"role": "user", "content": "Hello!"}]
+)
+
+# Streaming works too
+for chunk in client.chat.completions.create(
+    model="claude-sonnet-4-6",
+    messages=[{"role": "user", "content": "Hello!"}],
+    stream=True
+):
+    print(chunk.choices[0].delta.content, end="")
+```
+
+**Node.js:**
+
+```javascript
+import OpenAI from "openai";
+
+const client = new OpenAI({
+  baseURL: "http://localhost:8080/v1",
+  apiKey: "unused",
+});
+
+const stream = await client.chat.completions.create({
+  model: "claude-sonnet-4-6",
+  messages: [{ role: "user", content: "Hello!" }],
+  stream: true,
+});
+
+for await (const chunk of stream) {
+  process.stdout.write(chunk.choices[0]?.delta?.content || "");
+}
+```
+
+---
 
 ## License
 
 MIT
+
+---
+
+<p align="center">
+  Built by <a href="https://scuton.com">Scuton Technology</a>
+</p>
