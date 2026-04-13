@@ -16,5 +16,14 @@ Recommended manual assets to add before launch:
 
 If only two new assets are added, prioritize:
 
-1. terminal demo screenshot
+1. **`docs/screenshots/demo.png`** — terminal demo screenshot (REFERENCED IN README — broken until added)
 2. short startup-to-first-request GIF
+
+## demo.png spec
+
+Expected content:
+- Dark terminal window
+- A `curl` command sent to `http://localhost:8080/v1/chat/completions`
+- Response JSON visible
+- Response headers visible: `X-LLM-Provider: anthropic` and `X-LLM-Latency-Ms: 843`
+- Ideal size: 1800×900px or similar wide-format screenshot

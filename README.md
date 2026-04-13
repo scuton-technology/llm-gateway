@@ -1,8 +1,12 @@
 # LLM Gateway
 
+> Use your existing OpenAI client to call Claude, Gemini, or Ollama — without changing your code.
+
 One OpenAI-compatible API for all major LLM providers.
 
-Use Claude, GPT, Gemini, Groq, or Ollama through the same client. Switch providers without rewriting your app.
+Use Claude, GPT, Gemini, Groq, or Ollama through the same client.
+
+Switch providers without rewriting your app.
 
 ```bash
 docker run -p 8080:8080 -v gateway-data:/data scutontech/llm-gateway
@@ -12,12 +16,6 @@ docker run -p 8080:8080 -v gateway-data:/data scutontech/llm-gateway
 [![GitHub Release](https://img.shields.io/github/v/release/scuton-technology/llm-gateway?style=flat-square)](https://github.com/scuton-technology/llm-gateway/releases)
 [![Go 1.25](https://img.shields.io/badge/go-1.25-00ADD8?style=flat-square&logo=go)](https://golang.org)
 [![License: MIT](https://img.shields.io/github/license/scuton-technology/llm-gateway?style=flat-square)](LICENSE)
-
-> Use your existing OpenAI client to call Claude, Gemini, or Ollama — without changing your code.
-
-<p align="center">
-  <img src="docs/screenshots/dashboard-dark.png" alt="LLM Gateway dashboard" width="900">
-</p>
 
 ---
 
@@ -64,6 +62,10 @@ $ curl http://localhost:8080/v1/chat/completions \
 # X-LLM-Latency-Ms: 612
 {"id":"...","choices":[{"message":{"role":"assistant","content":"Hi there! What can I do for you?"}}],...}
 ```
+
+<p align="center">
+  <img src="docs/screenshots/demo.png" alt="Terminal demo — curl request and response" width="900">
+</p>
 
 ---
 
