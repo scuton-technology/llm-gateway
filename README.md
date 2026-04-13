@@ -1,8 +1,8 @@
 # LLM Gateway
 
-Use Claude, GPT-4o, Gemini, Groq, and Ollama through a single OpenAI-compatible API.
+One OpenAI-compatible API for all major LLM providers.
 
-**Switch LLM providers without rewriting your app.**
+Use Claude, GPT, Gemini, Groq, or Ollama through the same client. Switch providers without rewriting your app.
 
 ```bash
 docker run -p 8080:8080 -v gateway-data:/data scutontech/llm-gateway
@@ -12,6 +12,8 @@ docker run -p 8080:8080 -v gateway-data:/data scutontech/llm-gateway
 [![GitHub Release](https://img.shields.io/github/v/release/scuton-technology/llm-gateway?style=flat-square)](https://github.com/scuton-technology/llm-gateway/releases)
 [![Go 1.25](https://img.shields.io/badge/go-1.25-00ADD8?style=flat-square&logo=go)](https://golang.org)
 [![License: MIT](https://img.shields.io/github/license/scuton-technology/llm-gateway?style=flat-square)](LICENSE)
+
+> Use your existing OpenAI client to call Claude, Gemini, or Ollama — without changing your code.
 
 <p align="center">
   <img src="docs/screenshots/dashboard-dark.png" alt="LLM Gateway dashboard" width="900">
@@ -41,7 +43,27 @@ client.chat.completions.create(model="gemini-2.0-flash", messages=[...])
 client.chat.completions.create(model="llama3", messages=[...])
 ```
 
-Same client. Same code. Any provider.
+Same client. Same code. Any provider. Works with the OpenAI SDK in Python, Node.js, Go, Ruby, or any language.
+
+```bash
+# What it looks like over the wire
+$ curl http://localhost:8080/v1/chat/completions \
+    -H "Content-Type: application/json" \
+    -d '{"model":"claude-sonnet-4-6","messages":[{"role":"user","content":"Hello"}]}'
+
+# Response — standard OpenAI format
+# X-LLM-Provider: anthropic
+# X-LLM-Latency-Ms: 843
+{"id":"...","choices":[{"message":{"role":"assistant","content":"Hello! How can I help you today?"}}],...}
+
+# Change the model, get a different provider — nothing else changes
+$ curl http://localhost:8080/v1/chat/completions \
+    -d '{"model":"gpt-4o","messages":[{"role":"user","content":"Hello"}]}'
+
+# X-LLM-Provider: openai
+# X-LLM-Latency-Ms: 612
+{"id":"...","choices":[{"message":{"role":"assistant","content":"Hi there! What can I do for you?"}}],...}
+```
 
 ---
 
@@ -80,6 +102,8 @@ docker run -p 8080:8080 -v gateway-data:/data scutontech/llm-gateway
 3. Add provider API keys in **Settings**
 4. Send requests to `http://localhost:8080/v1/chat/completions`
 
+No config files. No YAML. No Python environment.
+
 > **Remote setup:** if you deploy on a server first, use the one-time token printed at startup:
 > ```
 > Remote setup URL: /admin/setup?token=<token>
@@ -116,7 +140,7 @@ curl -N http://localhost:8080/v1/chat/completions \
   <img src="docs/screenshots/dashboard-dark.png" alt="Dashboard" width="860">
 </p>
 
-Total requests, tokens, errors, average latency. Live request feed with provider, model, status, and latency per row.
+Monitor usage, cost, and latency across all providers — total requests, tokens, errors, average latency, and a live request feed with provider, model, status, and latency per row.
 
 ### Analytics
 
