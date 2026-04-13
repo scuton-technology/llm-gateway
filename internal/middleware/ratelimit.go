@@ -8,10 +8,10 @@ import (
 
 // RateLimiter implements a simple token bucket rate limiter per IP.
 type RateLimiter struct {
-	mu       sync.Mutex
-	clients  map[string]*bucket
-	rate     int           // requests per window
-	window   time.Duration
+	mu      sync.Mutex
+	clients map[string]*bucket
+	rate    int // requests per window
+	window  time.Duration
 }
 
 type bucket struct {
@@ -29,7 +29,7 @@ func NewRateLimiter(rate int, window time.Duration) *RateLimiter {
 
 func (rl *RateLimiter) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ip := clientIP(r)
+		ip := ClientIP(r)
 
 		rl.mu.Lock()
 		b, exists := rl.clients[ip]

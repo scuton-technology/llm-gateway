@@ -41,9 +41,9 @@ func (p *GeminiProvider) SupportsModel(model string) bool {
 // Gemini API types
 
 type geminiRequest struct {
-	Contents         []geminiContent         `json:"contents"`
+	Contents          []geminiContent         `json:"contents"`
 	SystemInstruction *geminiContent          `json:"systemInstruction,omitempty"`
-	GenerationConfig *geminiGenerationConfig `json:"generationConfig,omitempty"`
+	GenerationConfig  *geminiGenerationConfig `json:"generationConfig,omitempty"`
 }
 
 type geminiContent struct {
@@ -63,8 +63,8 @@ type geminiGenerationConfig struct {
 }
 
 type geminiResponse struct {
-	Candidates []geminiCandidate `json:"candidates"`
-	UsageMetadata *geminiUsage   `json:"usageMetadata"`
+	Candidates    []geminiCandidate `json:"candidates"`
+	UsageMetadata *geminiUsage      `json:"usageMetadata"`
 }
 
 type geminiCandidate struct {
@@ -83,8 +83,8 @@ func (p *GeminiProvider) ChatCompletion(ctx context.Context, req ChatRequest) (*
 
 	// Build generation config
 	gc := &geminiGenerationConfig{
-		Temperature: req.Temperature,
-		TopP:        req.TopP,
+		Temperature:     req.Temperature,
+		TopP:            req.TopP,
 		MaxOutputTokens: req.MaxTokens,
 		StopSequences:   req.Stop,
 	}
@@ -92,9 +92,13 @@ func (p *GeminiProvider) ChatCompletion(ctx context.Context, req ChatRequest) (*
 
 	// Convert messages
 	for _, msg := range req.Messages {
+		text, err := msg.TextContent()
+		if err != nil {
+			return nil, fmt.Errorf("gemini adapter only supports text content: %w", err)
+		}
 		if msg.Role == "system" {
 			gReq.SystemInstruction = &geminiContent{
-				Parts: []geminiPart{{Text: msg.Content}},
+				Parts: []geminiPart{{Text: text}},
 			}
 			continue
 		}
@@ -103,10 +107,13 @@ func (p *GeminiProvider) ChatCompletion(ctx context.Context, req ChatRequest) (*
 		if role == "assistant" {
 			role = "model"
 		}
+		if role != "user" && role != "model" {
+			return nil, fmt.Errorf("gemini does not support %q messages", msg.Role)
+		}
 
 		gReq.Contents = append(gReq.Contents, geminiContent{
 			Role:  role,
-			Parts: []geminiPart{{Text: msg.Content}},
+			Parts: []geminiPart{{Text: text}},
 		})
 	}
 
@@ -172,7 +179,7 @@ func (p *GeminiProvider) ChatCompletion(ctx context.Context, req ChatRequest) (*
 		Choices: []Choice{
 			{
 				Index:        0,
-				Message:      Message{Role: "assistant", Content: content},
+				Message:      Message{Role: "assistant", Content: NewTextContent(content)},
 				FinishReason: finishReason,
 			},
 		},
@@ -193,9 +200,13 @@ func (p *GeminiProvider) ChatCompletionStream(ctx context.Context, req ChatReque
 	gReq.GenerationConfig = gc
 
 	for _, msg := range req.Messages {
+		text, err := msg.TextContent()
+		if err != nil {
+			return nil, fmt.Errorf("gemini adapter only supports text content: %w", err)
+		}
 		if msg.Role == "system" {
 			gReq.SystemInstruction = &geminiContent{
-				Parts: []geminiPart{{Text: msg.Content}},
+				Parts: []geminiPart{{Text: text}},
 			}
 			continue
 		}
@@ -203,9 +214,12 @@ func (p *GeminiProvider) ChatCompletionStream(ctx context.Context, req ChatReque
 		if role == "assistant" {
 			role = "model"
 		}
+		if role != "user" && role != "model" {
+			return nil, fmt.Errorf("gemini does not support %q messages", msg.Role)
+		}
 		gReq.Contents = append(gReq.Contents, geminiContent{
 			Role:  role,
-			Parts: []geminiPart{{Text: msg.Content}},
+			Parts: []geminiPart{{Text: text}},
 		})
 	}
 

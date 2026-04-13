@@ -1,8 +1,10 @@
 <p align="center">
   <h1 align="center">LLM Gateway</h1>
   <p align="center">
-    Universal LLM proxy &mdash; one OpenAI-compatible API for <strong>12 providers</strong>.<br/>
-    Single Go binary. SSE streaming. Admin dashboard. Zero config.
+    <strong>One OpenAI-compatible endpoint for OpenAI, Claude, Gemini, Groq, Ollama, LM Studio, vLLM, and more.</strong>
+  </p>
+  <p align="center">
+    Lightweight, self-hosted, Go-based gateway for developers who want to switch providers without rewriting app code.
   </p>
 </p>
 
@@ -14,324 +16,58 @@
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/dashboard-dark.png" alt="LLM Gateway Dashboard" width="800">
+  <img src="docs/screenshots/dashboard-dark.png" alt="LLM Gateway Dashboard" width="860">
 </p>
 
-```
-curl http://localhost:8080/v1/chat/completions → Anthropic / OpenAI / Gemini / Groq / Mistral / Cohere / xAI / Perplexity / Together / Ollama / LM Studio / vLLM
-```
-
----
-
-## Quick Start
-
-**Docker (recommended):**
-
 ```bash
-docker run -p 8080:8080 -v gateway-data:/data scutontech/llm-gateway
+http://localhost:8080/v1/chat/completions
 ```
 
-Open `http://localhost:8080` &rarr; set admin password &rarr; add API keys in Settings &rarr; done.
-
-**Binary:**
-
-```bash
-git clone https://github.com/scuton-technology/llm-gateway.git
-cd llm-gateway
-go build -o llm-gateway ./cmd/gateway
-./llm-gateway
-```
-
----
-
-## Usage
-
-Send standard OpenAI-format requests. The gateway routes to the right provider automatically.
-
-**Claude (Anthropic):**
-
-```bash
-curl http://localhost:8080/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "claude-sonnet-4-6",
-    "messages": [{"role": "user", "content": "Hello!"}]
-  }'
-```
-
-**GPT-4o (OpenAI):**
-
-```bash
-curl http://localhost:8080/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "gpt-4o",
-    "messages": [{"role": "user", "content": "Hello!"}]
-  }'
-```
-
-**Ollama (local):**
-
-```bash
-curl http://localhost:8080/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "llama3",
-    "messages": [{"role": "user", "content": "Hello!"}]
-  }'
-```
-
-**SSE Streaming:**
-
-```bash
-curl -N http://localhost:8080/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "claude-sonnet-4-6",
-    "stream": true,
-    "messages": [{"role": "user", "content": "Write a haiku about coding"}]
-  }'
-```
-
-```
-data: {"id":"msg_01X...","object":"chat.completion.chunk","choices":[{"delta":{"role":"assistant"}}]}
-data: {"id":"msg_01X...","object":"chat.completion.chunk","choices":[{"delta":{"content":"Fingers "}}]}
-data: {"id":"msg_01X...","object":"chat.completion.chunk","choices":[{"delta":{"content":"dance on keys"}}]}
-data: [DONE]
-```
-
-All providers stream in **OpenAI SSE format** &mdash; even Anthropic and Gemini are translated on the fly.
-
----
-
-## Supported Providers
-
-| Provider | Models | Format | Streaming |
-|----------|--------|--------|-----------|
-| **Anthropic** | claude-sonnet-4-6, claude-opus-4-6, claude-haiku-4-5, claude-3-haiku | Messages API &rarr; OpenAI | Anthropic SSE &rarr; OpenAI SSE |
-| **OpenAI** | gpt-4o, gpt-4o-mini, o1, o3-mini | Native | Pass-through |
-| **Google** | gemini-2.0-flash, gemini-1.5-pro | Gemini API &rarr; OpenAI | Gemini SSE &rarr; OpenAI SSE |
-| **Groq** | llama-3.3-70b, mixtral-8x7b | OpenAI-compatible | Pass-through |
-| **Mistral** | mistral-large, mistral-small, codestral | OpenAI-compatible | Pass-through |
-| **Cohere** | command-r-plus, command-r | Chat API &rarr; OpenAI | &mdash; |
-| **xAI** | grok-2, grok-2-mini | OpenAI-compatible | Pass-through |
-| **Perplexity** | sonar-large, sonar-small | OpenAI-compatible | Pass-through |
-| **Together AI** | meta-llama/Llama-3-70b, etc. | OpenAI-compatible | Pass-through |
-| **Ollama** | llama3, mistral, codellama, phi3 | OpenAI-compatible (local) | Pass-through |
-| **LM Studio** | Any loaded model | OpenAI-compatible (local) | Pass-through |
-| **vLLM** | Any served model | OpenAI-compatible (local) | Pass-through |
-
-Model routing is automatic by prefix: `claude-*` &rarr; Anthropic, `gpt-*` &rarr; OpenAI, `gemini-*` &rarr; Google, etc.
-
----
-
-## Features
-
-### Admin Dashboard
-
-Real-time metrics with Chart.js: requests, tokens, latency, cost, provider breakdown.
-
-<p align="center">
-  <img src="docs/screenshots/dashboard-dark.png" alt="Dashboard" width="700">
-</p>
-
-### Spending Analytics
-
-Historical cost tracking with timeline charts, provider stacked bars, model ranking, and CSV export.
-
-<p align="center">
-  <img src="docs/screenshots/analytics-dark.png" alt="Analytics" width="700">
-</p>
-
-### Provider Settings
-
-Add/test/delete API keys per provider via the web UI. Priority: `.env` &rarr; SQLite &rarr; empty.
-
-<p align="center">
-  <img src="docs/screenshots/settings-dark.png" alt="Settings" width="700">
-</p>
-
-### SSE Streaming
-
-All 11 streaming-capable providers emit **OpenAI-format SSE chunks**. Anthropic and Gemini streams are converted on the fly &mdash; your client code doesn't need to care which provider is behind the model.
-
-### Admin Auth
-
-- bcrypt password hashing (cost 12)
-- HttpOnly session cookies (24h expiry)
-- Brute force protection (5 attempts &rarr; 15 min lockout)
-- First-run setup page at `/admin/setup`
-- `--reset-password` CLI flag
-
-### Dark / Light Mode
-
-All pages support dark and light themes with system preference detection and localStorage persistence.
-
----
+Use the same OpenAI-style request format and route it to OpenAI, Anthropic, Gemini, Groq, Mistral, Cohere, xAI, Perplexity, Together AI, Ollama, LM Studio, or vLLM.
 
 ## Why LLM Gateway?
 
-| | **LLM Gateway** | **LiteLLM** |
-|---|---|---|
-| **Language** | Go (single static binary) | Python |
-| **Install size** | ~15 MB Docker image | ~500 MB+ with dependencies |
-| **Startup time** | < 100ms | Several seconds |
-| **Memory** | ~10 MB idle | ~100 MB+ idle |
-| **Dependencies** | Zero (embedded SQLite) | pip, PostgreSQL/Redis optional |
-| **Config** | Web UI + `.env` | YAML config files |
-| **Dashboard** | Built-in (Chart.js) | Separate UI package |
-| **Streaming** | Native SSE pass-through | Async Python generators |
-| **Deployment** | `docker run` one-liner | Docker Compose + config |
-| **Best for** | Self-hosted, low-resource, edge | Enterprise, complex routing |
+- Keep your app on one OpenAI-compatible chat completions API.
+- Switch providers by changing the model, not the client integration.
+- Run it as a single Go binary or one Docker container.
+- Use cloud and local/self-hosted providers behind the same endpoint.
+- Get built-in streaming, provider settings, request logs, and basic cost analytics.
+- Self-host it with SQLite and no extra database or cache.
 
-LLM Gateway is designed for developers who want a **dead-simple, lightweight proxy** they can run anywhere &mdash; from a $5 VPS to a Raspberry Pi. No YAML configs, no Python virtualenvs, no external databases.
+## Supported Providers
 
----
+- Cloud: OpenAI, Anthropic, Google Gemini, Groq, Mistral, Cohere, xAI, Perplexity, Together AI
+- Local / self-hosted: Ollama, LM Studio, vLLM
+- Streaming: OpenAI-format SSE for 11 providers; Cohere is non-streaming
+- Routing: provider selection is based on model name or model prefix
 
-## API Endpoints
+Examples:
 
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| `POST` | `/v1/chat/completions` | No | Proxy endpoint (OpenAI-compatible) |
-| `GET` | `/health` | No | Health check + registered providers |
-| `GET` | `/admin` | Yes | Dashboard UI |
-| `GET` | `/admin/analytics` | Yes | Spending analytics UI |
-| `GET` | `/admin/settings` | Yes | Provider settings UI |
-| `GET` | `/admin/login` | No | Login page |
-| `GET` | `/admin/setup` | No | First-run password setup |
-| `GET` | `/api/dashboard` | Yes | Dashboard data (JSON) |
-| `GET` | `/api/stats/daily` | Yes | Daily statistics |
-| `GET` | `/api/stats/providers` | Yes | Provider breakdown |
-| `GET` | `/api/stats/models` | Yes | Model cost ranking |
+- `gpt-4o` -> OpenAI
+- `claude-sonnet-4-6` -> Anthropic
+- `gemini-2.0-flash` -> Google
+- `llama3` -> Ollama
+- `meta-llama/Llama-3-70b-chat-hf` -> Together AI
 
-Every proxied response includes headers:
-- `X-LLM-Provider` &mdash; which provider handled the request
-- `X-LLM-Latency-Ms` &mdash; end-to-end latency in milliseconds
+## OpenAI SDK Compatible
 
----
-
-## Configuration
-
-### Environment Variables
-
-```bash
-# Server
-PORT=8080              # Server port (default: 8080)
-DB_PATH=gateway.db     # SQLite database path
-
-# Cloud Providers (set API key to enable)
-ANTHROPIC_API_KEY=sk-ant-...
-OPENAI_API_KEY=sk-...
-GOOGLE_API_KEY=AIza...
-GROQ_API_KEY=gsk_...
-MISTRAL_API_KEY=...
-COHERE_API_KEY=...
-XAI_API_KEY=xai-...
-PERPLEXITY_API_KEY=pplx-...
-TOGETHER_API_KEY=...
-
-# Local Providers (set ENABLED=true to activate)
-OLLAMA_ENABLED=false
-OLLAMA_BASE_URL=http://localhost:11434
-LMSTUDIO_ENABLED=false
-LMSTUDIO_BASE_URL=http://localhost:1234
-VLLM_ENABLED=false
-VLLM_BASE_URL=http://localhost:8000
-```
-
-### Web UI
-
-You can also manage API keys from the **Settings** page at `/admin/settings`. Keys saved via the UI are stored in SQLite. Priority order: `.env` > SQLite > empty.
-
-### Docker Compose
-
-```yaml
-services:
-  llm-gateway:
-    image: scutontech/llm-gateway:latest
-    ports:
-      - "8080:8080"
-    volumes:
-      - gateway-data:/data
-    environment:
-      - ANTHROPIC_API_KEY=sk-ant-...
-      - OPENAI_API_KEY=sk-...
-
-volumes:
-  gateway-data:
-```
-
-### Password Reset
-
-```bash
-# Reset admin password (then visit /admin/setup)
-./llm-gateway --reset-password
-
-# Docker
-docker exec <container> llm-gateway --reset-password
-```
-
----
-
-## Architecture
-
-```
-cmd/gateway/main.go              HTTP server, provider registration, auth setup
-internal/
-  providers/
-    interface.go                  Provider + StreamProvider interfaces
-    streaming.go                  SSE helpers, OpenAI passthrough stream
-    openai.go                     OpenAI + Groq + Ollama + LM Studio + vLLM + Together
-    anthropic.go                  Anthropic Messages API + stream conversion
-    gemini.go                     Google Gemini API + stream conversion
-    mistral.go                    Mistral (OpenAI-compat)
-    cohere.go                     Cohere Chat API translation
-    xai.go                        xAI Grok (OpenAI-compat)
-    perplexity.go                 Perplexity Sonar (OpenAI-compat)
-    registry.go                   Model -> provider resolution
-  proxy/router.go                 Request routing, streaming dispatch
-  admin/
-    handler.go                    Dashboard + settings + analytics APIs
-    auth.go                       Login, setup, session management
-  middleware/logging.go           HTTP request logging
-  storage/sqlite.go               SQLite: logs, settings, auth, analytics
-web/
-  dashboard.html                  Admin dashboard (Chart.js)
-  analytics.html                  Spending analytics (Chart.js)
-  settings.html                   Provider settings UI
-  login.html                      Login page
-  setup.html                      First-run setup page
-```
-
----
-
-## OpenAI SDK Compatibility
-
-LLM Gateway works as a drop-in replacement with any OpenAI SDK:
-
-**Python:**
+LLM Gateway is designed to work with existing OpenAI SDK clients for the chat completions API.
 
 ```python
 from openai import OpenAI
 
-client = OpenAI(base_url="http://localhost:8080/v1", api_key="unused")
-
-# Use any provider through the same client
-response = client.chat.completions.create(
-    model="claude-sonnet-4-6",  # Routes to Anthropic
-    messages=[{"role": "user", "content": "Hello!"}]
+client = OpenAI(
+    base_url="http://localhost:8080/v1",
+    api_key="unused",
 )
 
-# Streaming works too
-for chunk in client.chat.completions.create(
+response = client.chat.completions.create(
     model="claude-sonnet-4-6",
-    messages=[{"role": "user", "content": "Hello!"}],
-    stream=True
-):
-    print(chunk.choices[0].delta.content, end="")
-```
+    messages=[{"role": "user", "content": "Hello from the same client code"}],
+)
 
-**Node.js:**
+print(response.choices[0].message.content)
+```
 
 ```javascript
 import OpenAI from "openai";
@@ -341,24 +77,255 @@ const client = new OpenAI({
   apiKey: "unused",
 });
 
-const stream = await client.chat.completions.create({
-  model: "claude-sonnet-4-6",
-  messages: [{ role: "user", content: "Hello!" }],
-  stream: true,
+const response = await client.chat.completions.create({
+  model: "gemini-2.0-flash",
+  messages: [{ role: "user", content: "Hello from the same client code" }],
 });
 
-for await (const chunk of stream) {
-  process.stdout.write(chunk.choices[0]?.delta?.content || "");
-}
+console.log(response.choices[0].message.content);
 ```
 
----
+Today the compatibility surface is the OpenAI-style `chat.completions` endpoint exposed at `/v1/chat/completions`.
+
+## Quick Start
+
+### Docker
+
+```bash
+docker run -p 8080:8080 -v gateway-data:/data scutontech/llm-gateway
+```
+
+Then:
+
+1. Open `http://localhost:8080`
+2. Create the admin password
+3. Add one or more provider API keys in **Settings**
+4. Send requests to `http://localhost:8080/v1/chat/completions`
+
+If you expose the gateway before setup is complete, remote setup requires the one-time token printed in the startup logs:
+
+```text
+Remote setup URL: /admin/setup?token=...
+```
+
+### Build From Source
+
+```bash
+git clone https://github.com/scuton-technology/llm-gateway.git
+cd llm-gateway
+go build -o llm-gateway ./cmd/gateway
+./llm-gateway
+```
+
+### First Request
+
+```bash
+curl http://localhost:8080/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "claude-sonnet-4-6",
+    "messages": [{"role": "user", "content": "Write a haiku about Go"}]
+  }'
+```
+
+### Streaming
+
+```bash
+curl -N http://localhost:8080/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-4o",
+    "stream": true,
+    "messages": [{"role": "user", "content": "Count to five"}]
+  }'
+```
+
+## What You Get
+
+- OpenAI-compatible request format across multiple providers
+- Provider auto-routing based on model name
+- Streaming translation into OpenAI SSE format
+- Web UI for setup, provider settings, dashboard, and analytics
+- Request logging with provider, model, token, latency, and error tracking
+- Basic cost estimation in the admin UI
+- Admin auth with setup flow, sessions, and lockout protection
+
+## Screenshots
+
+### Dashboard
+
+<p align="center">
+  <img src="docs/screenshots/dashboard-dark.png" alt="Dashboard" width="760">
+</p>
+
+### Analytics
+
+<p align="center">
+  <img src="docs/screenshots/analytics-dark.png" alt="Analytics" width="760">
+</p>
+
+### Provider Settings
+
+<p align="center">
+  <img src="docs/screenshots/settings-dark.png" alt="Settings" width="760">
+</p>
+
+## Why Teams Pick It
+
+LLM Gateway is a good fit when you want a small self-hosted gateway that keeps application code stable while you switch models and providers.
+
+It is especially useful if you:
+
+- already use the OpenAI SDK or OpenAI-style request payloads
+- want to compare providers behind one endpoint
+- want local models and hosted models behind the same API
+- prefer a lightweight Go service over a larger Python stack
+- want a built-in UI instead of external admin tooling
+
+## LLM Gateway vs LiteLLM
+
+LiteLLM is a strong option if you need a broader routing and policy surface area. LLM Gateway is aimed at developers who want a smaller self-hosted gateway with a built-in UI and a simpler operational footprint.
+
+| | **LLM Gateway** | **LiteLLM** |
+|---|---|---|
+| Core runtime | Go | Python |
+| Primary focus | Lightweight self-hosted gateway | Broad provider + routing platform |
+| API surface in this repo | OpenAI-style chat completions | Wider compatibility surface |
+| Local model support | Built-in via OpenAI-compatible backends | Supported |
+| Admin UI | Built-in | Typically paired with other tooling |
+| Best fit | Small teams, self-hosting, simple deployment | More complex routing and policy setups |
+
+## API Endpoints
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| `POST` | `/v1/chat/completions` | No | OpenAI-compatible proxy endpoint |
+| `GET` | `/health` | No | Health check + registered providers |
+| `GET` | `/admin` | Yes | Dashboard UI |
+| `GET` | `/admin/analytics` | Yes | Analytics UI |
+| `GET` | `/admin/settings` | Yes | Provider settings UI |
+| `GET` | `/admin/login` | No | Login page |
+| `GET` | `/admin/setup` | No | First-run password setup |
+| `GET` | `/api/dashboard` | Yes | Dashboard data |
+| `GET` | `/api/stats` | Yes | 24h aggregate stats |
+| `GET` | `/api/logs` | Yes | Recent request logs |
+| `GET` | `/api/stats/daily` | Yes | Daily statistics |
+| `GET` | `/api/stats/monthly` | Yes | Monthly statistics |
+| `GET` | `/api/stats/providers` | Yes | Provider breakdown |
+| `GET` | `/api/stats/models` | Yes | Model ranking / token usage |
+
+Proxy responses include:
+
+- `X-LLM-Provider`
+- `X-LLM-Latency-Ms`
+
+## Configuration
+
+### Environment Variables
+
+```bash
+# Server
+PORT=8080
+DB_PATH=gateway.db
+PUBLIC_RATE_LIMIT_RPM=60
+
+# Security
+LLM_GATEWAY_ENCRYPTION_KEY=changeme
+LLM_GATEWAY_TRUST_PROXY_HEADERS=false
+
+# Cloud providers
+ANTHROPIC_API_KEY=
+OPENAI_API_KEY=
+GOOGLE_API_KEY=
+GROQ_API_KEY=
+MISTRAL_API_KEY=
+COHERE_API_KEY=
+XAI_API_KEY=
+PERPLEXITY_API_KEY=
+TOGETHER_API_KEY=
+
+# Local providers
+OLLAMA_ENABLED=false
+OLLAMA_BASE_URL=http://localhost:11434
+LMSTUDIO_ENABLED=false
+LMSTUDIO_BASE_URL=http://localhost:1234
+VLLM_ENABLED=false
+VLLM_BASE_URL=http://localhost:8000
+```
+
+### Docker Compose
+
+```yaml
+services:
+  gateway:
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      - gateway-data:/data
+    env_file:
+      - .env
+    restart: unless-stopped
+
+volumes:
+  gateway-data:
+```
+
+### Provider Settings Priority
+
+- Environment variables override database values
+- Values saved in the UI are used when no env var is present
+- Empty means the provider is unavailable
+
+## Security Notes
+
+- Admin setup is protected by a first-run password flow
+- Remote first-run setup requires the startup setup token unless you connect from localhost
+- Admin sessions use secure cookies when the gateway is served over HTTPS
+- Provider secrets entered in the UI are encrypted at rest
+- Proxy header trust is off by default; enable it only behind a trusted reverse proxy
+- Public chat requests are rate-limited by default through `PUBLIC_RATE_LIMIT_RPM`
+
+## Password Reset
+
+```bash
+./llm-gateway --reset-password
+```
+
+Docker:
+
+```bash
+docker exec <container> llm-gateway --reset-password
+```
+
+## Architecture
+
+```text
+cmd/gateway/main.go              HTTP server, provider registration, auth setup
+internal/
+  providers/
+    interface.go                Provider interfaces and OpenAI-style types
+    streaming.go                SSE helpers and passthrough streaming
+    openai.go                   OpenAI-compatible providers
+    anthropic.go                Anthropic adapter + stream conversion
+    gemini.go                   Gemini adapter + stream conversion
+    mistral.go                  Mistral adapter
+    cohere.go                   Cohere adapter
+    xai.go                      xAI adapter
+    perplexity.go               Perplexity adapter
+    registry.go                 Model to provider resolution
+  proxy/router.go               Request routing and streaming dispatch
+  admin/
+    auth.go                     Setup, login, logout, sessions
+    handler.go                  Dashboard, analytics, settings APIs
+  middleware/                   Logging, rate limiting, request helpers
+  storage/sqlite.go             SQLite storage for logs, auth, settings
+web/                            Embedded admin pages
+```
 
 ## License
 
 MIT
-
----
 
 <p align="center">
   Built by <a href="https://scuton.com">Scuton Technology</a>

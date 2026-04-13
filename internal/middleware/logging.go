@@ -17,7 +17,7 @@ func Logging(next http.Handler) http.Handler {
 
 		log.Printf("%s %s %d %s %s",
 			r.Method, r.URL.Path, ww.status,
-			time.Since(start).Round(time.Millisecond), clientIP(r))
+			time.Since(start).Round(time.Millisecond), ClientIP(r))
 	})
 }
 
@@ -29,14 +29,4 @@ type statusWriter struct {
 func (w *statusWriter) WriteHeader(status int) {
 	w.status = status
 	w.ResponseWriter.WriteHeader(status)
-}
-
-func clientIP(r *http.Request) string {
-	if ip := r.Header.Get("X-Forwarded-For"); ip != "" {
-		return ip
-	}
-	if ip := r.Header.Get("X-Real-IP"); ip != "" {
-		return ip
-	}
-	return r.RemoteAddr
 }

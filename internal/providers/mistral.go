@@ -21,7 +21,14 @@ type MistralProvider struct {
 func NewMistralProvider(apiKey string) *MistralProvider {
 	return &MistralProvider{
 		apiKey: apiKey,
-		models: []string{"mistral-large-latest", "mistral-small-latest", "codestral-latest"},
+		models: []string{
+			"mistral-large",
+			"mistral-large-latest",
+			"mistral-small",
+			"mistral-small-latest",
+			"codestral",
+			"codestral-latest",
+		},
 		client: &http.Client{Timeout: 120 * time.Second},
 	}
 }

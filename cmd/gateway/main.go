@@ -6,7 +6,9 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync"
+	"time"
 
 	"github.com/scuton-technology/llm-gateway/internal/admin"
 	"github.com/scuton-technology/llm-gateway/internal/middleware"
@@ -69,7 +71,14 @@ func main() {
 	mux := http.NewServeMux()
 
 	// Public API endpoints (no auth needed)
-	mux.HandleFunc("/v1/chat/completions", router.HandleChatCompletion)
+	var chatHandler http.Handler = http.HandlerFunc(router.HandleChatCompletion)
+	if rateLimit := envInt("PUBLIC_RATE_LIMIT_RPM", 60); rateLimit > 0 {
+		chatHandler = middleware.NewRateLimiter(rateLimit, time.Minute).Middleware(chatHandler)
+		log.Printf("Public chat rate limit: %d requests/minute per IP", rateLimit)
+	} else {
+		log.Printf("Public chat rate limit: disabled")
+	}
+	mux.Handle("/v1/chat/completions", chatHandler)
 	mux.HandleFunc("/health", router.HandleHealth)
 
 	// Auth endpoints (no auth needed)
@@ -116,6 +125,10 @@ func main() {
 		log.Printf("Admin auth: enabled (login at /admin/login)")
 	} else {
 		log.Printf("Admin auth: not configured (setup at /admin/setup)")
+		if token := authHandler.SetupToken(); token != "" {
+			log.Printf("Remote setup token: %s", token)
+			log.Printf("Remote setup URL: /admin/setup?token=%s", token)
+		}
 	}
 	log.Printf("POST /v1/chat/completions — proxy endpoint")
 	log.Printf("GET  /health              — health check")
@@ -123,7 +136,16 @@ func main() {
 	log.Printf("GET  /admin/settings      — provider settings")
 	log.Printf("GET  /admin/analytics     — spending analytics")
 
-	if err := http.ListenAndServe(":"+port, handler); err != nil {
+	server := &http.Server{
+		Addr:              ":" + port,
+		Handler:           handler,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		IdleTimeout:       2 * time.Minute,
+		MaxHeaderBytes:    1 << 20,
+	}
+
+	if err := server.ListenAndServe(); err != nil {
 		log.Fatalf("server failed: %v", err)
 	}
 }
@@ -294,6 +316,15 @@ func registerProviders(registry *providers.Registry, store *storage.Store) {
 func envOr(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {
 		return v
+	}
+	return fallback
+}
+
+func envInt(key string, fallback int) int {
+	if v := os.Getenv(key); v != "" {
+		if parsed, err := strconv.Atoi(v); err == nil {
+			return parsed
+		}
 	}
 	return fallback
 }

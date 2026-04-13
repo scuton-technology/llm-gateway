@@ -6,11 +6,15 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
+	"github.com/scuton-technology/llm-gateway/internal/middleware"
 	"github.com/scuton-technology/llm-gateway/internal/providers"
 	"github.com/scuton-technology/llm-gateway/internal/storage"
 )
+
+const maxChatRequestBytes = 2 << 20
 
 type Router struct {
 	registry *providers.Registry
@@ -30,8 +34,13 @@ func (rt *Router) HandleChatCompletion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, maxChatRequestBytes)
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
+		if strings.Contains(err.Error(), "http: request body too large") {
+			writeError(w, http.StatusRequestEntityTooLarge, "request body too large", "request_too_large")
+			return
+		}
 		writeError(w, http.StatusBadRequest, "failed to read request body", "invalid_request")
 		return
 	}
@@ -61,7 +70,7 @@ func (rt *Router) HandleChatCompletion(w http.ResponseWriter, r *http.Request) {
 			Provider:     "unknown",
 			StatusCode:   http.StatusBadRequest,
 			ErrorMessage: err.Error(),
-			ClientIP:     clientIP(r),
+			ClientIP:     middleware.ClientIP(r),
 		})
 		writeError(w, http.StatusBadRequest, err.Error(), "model_not_found")
 		return
@@ -83,7 +92,7 @@ func (rt *Router) HandleChatCompletion(w http.ResponseWriter, r *http.Request) {
 		Model:     req.Model,
 		Provider:  provider.Name(),
 		LatencyMs: latency.Milliseconds(),
-		ClientIP:  clientIP(r),
+		ClientIP:  middleware.ClientIP(r),
 	}
 
 	if err != nil {
@@ -133,7 +142,7 @@ func (rt *Router) handleStream(w http.ResponseWriter, r *http.Request, provider 
 		Model:     req.Model,
 		Provider:  provider.Name(),
 		LatencyMs: latency.Milliseconds(),
-		ClientIP:  clientIP(r),
+		ClientIP:  middleware.ClientIP(r),
 	}
 
 	if err != nil {
@@ -205,14 +214,4 @@ func writeError(w http.ResponseWriter, status int, message, code string) {
 			Code:    code,
 		},
 	})
-}
-
-func clientIP(r *http.Request) string {
-	if ip := r.Header.Get("X-Forwarded-For"); ip != "" {
-		return ip
-	}
-	if ip := r.Header.Get("X-Real-IP"); ip != "" {
-		return ip
-	}
-	return r.RemoteAddr
 }

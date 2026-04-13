@@ -69,13 +69,13 @@ type anthropicMessage struct {
 }
 
 type anthropicResponse struct {
-	ID           string              `json:"id"`
-	Type         string              `json:"type"`
-	Role         string              `json:"role"`
-	Content      []anthropicContent  `json:"content"`
-	Model        string              `json:"model"`
-	StopReason   string              `json:"stop_reason"`
-	Usage        anthropicUsage      `json:"usage"`
+	ID         string             `json:"id"`
+	Type       string             `json:"type"`
+	Role       string             `json:"role"`
+	Content    []anthropicContent `json:"content"`
+	Model      string             `json:"model"`
+	StopReason string             `json:"stop_reason"`
+	Usage      anthropicUsage     `json:"usage"`
 }
 
 type anthropicContent struct {
@@ -104,13 +104,20 @@ func (p *AnthropicProvider) ChatCompletion(ctx context.Context, req ChatRequest)
 
 	// Extract system message and convert the rest
 	for _, msg := range req.Messages {
+		text, err := msg.TextContent()
+		if err != nil {
+			return nil, fmt.Errorf("anthropic only supports text content: %w", err)
+		}
 		if msg.Role == "system" {
-			aReq.System = msg.Content
+			aReq.System = text
 			continue
+		}
+		if msg.Role != "user" && msg.Role != "assistant" {
+			return nil, fmt.Errorf("anthropic does not support %q messages", msg.Role)
 		}
 		aReq.Messages = append(aReq.Messages, anthropicMessage{
 			Role:    msg.Role,
-			Content: msg.Content,
+			Content: text,
 		})
 	}
 
@@ -175,7 +182,7 @@ func (p *AnthropicProvider) ChatCompletion(ctx context.Context, req ChatRequest)
 		Choices: []Choice{
 			{
 				Index:        0,
-				Message:      Message{Role: "assistant", Content: content},
+				Message:      Message{Role: "assistant", Content: NewTextContent(content)},
 				FinishReason: finishReason,
 			},
 		},
@@ -203,13 +210,20 @@ func (p *AnthropicProvider) ChatCompletionStream(ctx context.Context, req ChatRe
 	}
 
 	for _, msg := range req.Messages {
+		text, err := msg.TextContent()
+		if err != nil {
+			return nil, fmt.Errorf("anthropic only supports text content: %w", err)
+		}
 		if msg.Role == "system" {
-			aReq.System = msg.Content
+			aReq.System = text
 			continue
+		}
+		if msg.Role != "user" && msg.Role != "assistant" {
+			return nil, fmt.Errorf("anthropic does not support %q messages", msg.Role)
 		}
 		aReq.Messages = append(aReq.Messages, anthropicMessage{
 			Role:    msg.Role,
-			Content: msg.Content,
+			Content: text,
 		})
 	}
 

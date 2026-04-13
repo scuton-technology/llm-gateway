@@ -12,6 +12,8 @@ import (
 	"github.com/scuton-technology/llm-gateway/internal/storage"
 )
 
+const settingsBodyLimit = 64 << 10
+
 // ProviderMeta describes a known provider for the settings UI.
 type ProviderMeta struct {
 	Name        string `json:"name"`
@@ -154,20 +156,17 @@ func (h *Handler) HandleSaveSetting(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		http.Error(w, "failed to read body", http.StatusBadRequest)
-		return
-	}
-	defer r.Body.Close()
-
 	var req struct {
 		Provider string `json:"provider"`
 		APIKey   string `json:"api_key"`
 		BaseURL  string `json:"base_url"`
 	}
-	if err := json.Unmarshal(body, &req); err != nil {
-		http.Error(w, "invalid JSON", http.StatusBadRequest)
+	if err := readJSONBody(w, r, settingsBodyLimit, &req); err != nil {
+		if isBodyTooLarge(err) {
+			http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
+			return
+		}
+		http.Error(w, "failed to read body", http.StatusBadRequest)
 		return
 	}
 
@@ -221,18 +220,15 @@ func (h *Handler) HandleDeleteSetting(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		http.Error(w, "failed to read body", http.StatusBadRequest)
-		return
-	}
-	defer r.Body.Close()
-
 	var req struct {
 		Provider string `json:"provider"`
 	}
-	if err := json.Unmarshal(body, &req); err != nil {
-		http.Error(w, "invalid JSON", http.StatusBadRequest)
+	if err := readJSONBody(w, r, settingsBodyLimit, &req); err != nil {
+		if isBodyTooLarge(err) {
+			http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
+			return
+		}
+		http.Error(w, "failed to read body", http.StatusBadRequest)
 		return
 	}
 
@@ -260,20 +256,17 @@ func (h *Handler) HandleTestProvider(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		http.Error(w, "failed to read body", http.StatusBadRequest)
-		return
-	}
-	defer r.Body.Close()
-
 	var req struct {
 		Provider string `json:"provider"`
 		APIKey   string `json:"api_key"`
 		BaseURL  string `json:"base_url"`
 	}
-	if err := json.Unmarshal(body, &req); err != nil {
-		http.Error(w, "invalid JSON", http.StatusBadRequest)
+	if err := readJSONBody(w, r, settingsBodyLimit, &req); err != nil {
+		if isBodyTooLarge(err) {
+			http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
+			return
+		}
+		http.Error(w, "failed to read body", http.StatusBadRequest)
 		return
 	}
 
@@ -305,7 +298,7 @@ func testProviderConnectivity(provider, apiKey, baseURL string) map[string]any {
 			return map[string]any{"ok": false, "error": "no API key"}
 		}
 		// Use models list endpoint to verify API key without spending tokens
-		testReq, _ = http.NewRequest("GET", "https://api.anthropic.com/v1/models", nil)
+		testReq, err = http.NewRequest("GET", "https://api.anthropic.com/v1/models", nil)
 		testReq.Header.Set("x-api-key", apiKey)
 		testReq.Header.Set("anthropic-version", "2023-06-01")
 
@@ -313,48 +306,48 @@ func testProviderConnectivity(provider, apiKey, baseURL string) map[string]any {
 		if apiKey == "" {
 			return map[string]any{"ok": false, "error": "no API key"}
 		}
-		testReq, _ = http.NewRequest("GET", "https://api.openai.com/v1/models", nil)
+		testReq, err = http.NewRequest("GET", "https://api.openai.com/v1/models", nil)
 		testReq.Header.Set("Authorization", "Bearer "+apiKey)
 
 	case "google":
 		if apiKey == "" {
 			return map[string]any{"ok": false, "error": "no API key"}
 		}
-		testReq, _ = http.NewRequest("GET", fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models?key=%s", apiKey), nil)
+		testReq, err = http.NewRequest("GET", fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models?key=%s", apiKey), nil)
 
 	case "groq":
 		if apiKey == "" {
 			return map[string]any{"ok": false, "error": "no API key"}
 		}
-		testReq, _ = http.NewRequest("GET", "https://api.groq.com/openai/v1/models", nil)
+		testReq, err = http.NewRequest("GET", "https://api.groq.com/openai/v1/models", nil)
 		testReq.Header.Set("Authorization", "Bearer "+apiKey)
 
 	case "mistral":
 		if apiKey == "" {
 			return map[string]any{"ok": false, "error": "no API key"}
 		}
-		testReq, _ = http.NewRequest("GET", "https://api.mistral.ai/v1/models", nil)
+		testReq, err = http.NewRequest("GET", "https://api.mistral.ai/v1/models", nil)
 		testReq.Header.Set("Authorization", "Bearer "+apiKey)
 
 	case "cohere":
 		if apiKey == "" {
 			return map[string]any{"ok": false, "error": "no API key"}
 		}
-		testReq, _ = http.NewRequest("GET", "https://api.cohere.ai/v1/models", nil)
+		testReq, err = http.NewRequest("GET", "https://api.cohere.ai/v1/models", nil)
 		testReq.Header.Set("Authorization", "Bearer "+apiKey)
 
 	case "xai":
 		if apiKey == "" {
 			return map[string]any{"ok": false, "error": "no API key"}
 		}
-		testReq, _ = http.NewRequest("GET", "https://api.x.ai/v1/models", nil)
+		testReq, err = http.NewRequest("GET", "https://api.x.ai/v1/models", nil)
 		testReq.Header.Set("Authorization", "Bearer "+apiKey)
 
 	case "perplexity":
 		if apiKey == "" {
 			return map[string]any{"ok": false, "error": "no API key"}
 		}
-		testReq, _ = http.NewRequest("POST", "https://api.perplexity.ai/chat/completions", strings.NewReader(`{"model":"sonar-small","messages":[{"role":"user","content":"hi"}],"max_tokens":1}`))
+		testReq, err = http.NewRequest("POST", "https://api.perplexity.ai/chat/completions", strings.NewReader(`{"model":"sonar-small","messages":[{"role":"user","content":"hi"}],"max_tokens":1}`))
 		testReq.Header.Set("Authorization", "Bearer "+apiKey)
 		testReq.Header.Set("Content-Type", "application/json")
 
@@ -362,7 +355,7 @@ func testProviderConnectivity(provider, apiKey, baseURL string) map[string]any {
 		if apiKey == "" {
 			return map[string]any{"ok": false, "error": "no API key"}
 		}
-		testReq, _ = http.NewRequest("GET", "https://api.together.xyz/v1/models", nil)
+		testReq, err = http.NewRequest("GET", "https://api.together.xyz/v1/models", nil)
 		testReq.Header.Set("Authorization", "Bearer "+apiKey)
 
 	case "ollama":
@@ -370,24 +363,28 @@ func testProviderConnectivity(provider, apiKey, baseURL string) map[string]any {
 		if url == "" {
 			url = "http://localhost:11434"
 		}
-		testReq, _ = http.NewRequest("GET", url+"/api/tags", nil)
+		testReq, err = http.NewRequest("GET", url+"/api/tags", nil)
 
 	case "lmstudio":
 		url := baseURL
 		if url == "" {
 			url = "http://localhost:1234"
 		}
-		testReq, _ = http.NewRequest("GET", url+"/v1/models", nil)
+		testReq, err = http.NewRequest("GET", url+"/v1/models", nil)
 
 	case "vllm":
 		url := baseURL
 		if url == "" {
 			url = "http://localhost:8000"
 		}
-		testReq, _ = http.NewRequest("GET", url+"/v1/models", nil)
+		testReq, err = http.NewRequest("GET", url+"/v1/models", nil)
 
 	default:
 		return map[string]any{"ok": false, "error": "unknown provider"}
+	}
+
+	if err != nil {
+		return map[string]any{"ok": false, "error": err.Error()}
 	}
 
 	start := time.Now()

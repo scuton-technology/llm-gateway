@@ -1,21 +1,25 @@
 package admin
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
-	"io"
 	"log"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/scuton-technology/llm-gateway/internal/middleware"
 	"github.com/scuton-technology/llm-gateway/internal/storage"
 	"golang.org/x/crypto/bcrypt"
 )
 
 const (
-	bcryptCost     = 12
+	bcryptCost      = 12
+	minPasswordLen  = 10
+	authBodyLimit   = 16 << 10
 	sessionDuration = 24 * time.Hour
-	cookieName     = "llm_gateway_session"
+	cookieName      = "llm_gateway_session"
 )
 
 // AuthMiddleware protects admin routes.
@@ -25,17 +29,17 @@ func AuthMiddleware(store *storage.Store, next http.Handler) http.Handler {
 
 		// Always allow these paths without auth
 		if path == "/admin/login" || path == "/admin/setup" ||
-			path == "/health" || path == "/v1/chat/completions" ||
-			strings.HasPrefix(path, "/api/stats") ||
-			path == "/api/logs" {
+			path == "/health" || path == "/v1/chat/completions" {
 			next.ServeHTTP(w, r)
 			return
 		}
 
 		// API endpoints used by settings/dashboard need auth too
-		// But only admin/* and api/settings* and api/dashboard need protection
+		// Protect all admin pages and admin JSON APIs.
 		needsAuth := strings.HasPrefix(path, "/admin") ||
 			strings.HasPrefix(path, "/api/settings") ||
+			strings.HasPrefix(path, "/api/stats") ||
+			path == "/api/logs" ||
 			path == "/api/dashboard"
 
 		if !needsAuth {
@@ -73,17 +77,23 @@ func AuthMiddleware(store *storage.Store, next http.Handler) http.Handler {
 
 // AuthHandler handles login, logout, and setup.
 type AuthHandler struct {
-	store     *storage.Store
-	loginHTML []byte
-	setupHTML []byte
+	store      *storage.Store
+	loginHTML  []byte
+	setupHTML  []byte
+	setupToken string
 }
 
 func NewAuthHandler(store *storage.Store, loginHTML, setupHTML []byte) *AuthHandler {
 	return &AuthHandler{
-		store:     store,
-		loginHTML: loginHTML,
-		setupHTML: setupHTML,
+		store:      store,
+		loginHTML:  loginHTML,
+		setupHTML:  setupHTML,
+		setupToken: generateSetupToken(),
 	}
+}
+
+func (ah *AuthHandler) SetupToken() string {
+	return ah.setupToken
 }
 
 // ServeLogin serves the login page.
@@ -113,7 +123,7 @@ func (ah *AuthHandler) ServeLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (ah *AuthHandler) handleLogin(w http.ResponseWriter, r *http.Request) {
-	ip := clientIPFromRequest(r)
+	ip := middleware.ClientIP(r)
 
 	// Check brute force lockout
 	if ah.store.IsIPLocked(ip) {
@@ -121,24 +131,21 @@ func (ah *AuthHandler) handleLogin(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusTooManyRequests)
 		json.NewEncoder(w).Encode(map[string]any{
-			"error":       "too many failed attempts, try again later",
-			"locked_for":  remaining,
+			"error":      "too many failed attempts, try again later",
+			"locked_for": remaining,
 		})
 		return
 	}
 
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
-		return
-	}
-	defer r.Body.Close()
-
 	var req struct {
 		Password string `json:"password"`
 	}
-	if err := json.Unmarshal(body, &req); err != nil {
-		http.Error(w, "invalid JSON", http.StatusBadRequest)
+	if err := readJSONBody(w, r, authBodyLimit, &req); err != nil {
+		if isBodyTooLarge(err) {
+			http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
+			return
+		}
+		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
 
@@ -173,8 +180,10 @@ func (ah *AuthHandler) handleLogin(w http.ResponseWriter, r *http.Request) {
 		Value:    token,
 		Path:     "/",
 		HttpOnly: true,
+		Secure:   middleware.RequestIsHTTPS(r),
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   int(sessionDuration.Seconds()),
+		Expires:  time.Now().Add(sessionDuration),
 	})
 
 	log.Printf("Successful login from %s", ip)
@@ -188,6 +197,10 @@ func (ah *AuthHandler) ServeSetup(w http.ResponseWriter, r *http.Request) {
 		// If password already set, redirect to login
 		if ah.store.HasAdminPassword() {
 			http.Redirect(w, r, "/admin/login", http.StatusFound)
+			return
+		}
+		if !ah.canAccessSetup(r, r.URL.Query().Get("token")) {
+			http.Error(w, "remote setup is locked; use the startup setup token or connect from localhost", http.StatusForbidden)
 			return
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -212,26 +225,31 @@ func (ah *AuthHandler) handleSetup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
-		return
-	}
-	defer r.Body.Close()
-
 	var req struct {
 		Password        string `json:"password"`
 		PasswordConfirm string `json:"password_confirm"`
+		SetupToken      string `json:"setup_token"`
 	}
-	if err := json.Unmarshal(body, &req); err != nil {
-		http.Error(w, "invalid JSON", http.StatusBadRequest)
+	if err := readJSONBody(w, r, authBodyLimit, &req); err != nil {
+		if isBodyTooLarge(err) {
+			http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
+			return
+		}
+		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
 
-	if len(req.Password) < 6 {
+	if !ah.canAccessSetup(r, req.SetupToken) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		json.NewEncoder(w).Encode(map[string]any{"error": "remote setup is locked; provide the setup token or connect from localhost"})
+		return
+	}
+
+	if len(req.Password) < minPasswordLen {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]any{"error": "password must be at least 6 characters"})
+		json.NewEncoder(w).Encode(map[string]any{"error": "password must be at least 10 characters"})
 		return
 	}
 
@@ -254,6 +272,7 @@ func (ah *AuthHandler) handleSetup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Printf("Admin password set up successfully")
+	ah.setupToken = ""
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{"ok": true, "redirect": "/admin/login"})
 }
@@ -269,29 +288,25 @@ func (ah *AuthHandler) HandleLogout(w http.ResponseWriter, r *http.Request) {
 		Value:    "",
 		Path:     "/",
 		HttpOnly: true,
+		Secure:   middleware.RequestIsHTTPS(r),
+		SameSite: http.SameSiteLaxMode,
 		MaxAge:   -1,
+		Expires:  time.Unix(0, 0),
 	})
 
 	http.Redirect(w, r, "/admin/login", http.StatusFound)
 }
+func (ah *AuthHandler) canAccessSetup(r *http.Request, token string) bool {
+	if middleware.IsLoopbackRequest(r) {
+		return true
+	}
+	return ah.setupToken != "" && token != "" && token == ah.setupToken
+}
 
-func clientIPFromRequest(r *http.Request) string {
-	if ip := r.Header.Get("X-Forwarded-For"); ip != "" {
-		return strings.TrimSpace(strings.Split(ip, ",")[0])
+func generateSetupToken() string {
+	tokenBytes := make([]byte, 16)
+	if _, err := rand.Read(tokenBytes); err != nil {
+		return ""
 	}
-	if ip := r.Header.Get("X-Real-IP"); ip != "" {
-		return ip
-	}
-	// Strip port from RemoteAddr (e.g. "127.0.0.1:12345" → "127.0.0.1")
-	addr := r.RemoteAddr
-	if idx := strings.LastIndex(addr, ":"); idx != -1 {
-		// Handle IPv6 like [::1]:port
-		if strings.Contains(addr, "]") {
-			if bracketIdx := strings.LastIndex(addr, "]"); bracketIdx != -1 {
-				return addr[1:bracketIdx] // strip [ and ]
-			}
-		}
-		return addr[:idx]
-	}
-	return addr
+	return hex.EncodeToString(tokenBytes)
 }

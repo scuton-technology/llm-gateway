@@ -1,17 +1,25 @@
 package storage
 
 import (
+	"crypto/aes"
+	"crypto/cipher"
 	"crypto/rand"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/base64"
 	"encoding/hex"
+	"errors"
 	"fmt"
+	"os"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
 )
 
 type Store struct {
-	db *sql.DB
+	db            *sql.DB
+	encryptionKey []byte
 }
 
 type RequestLog struct {
@@ -88,7 +96,12 @@ func New(dbPath string) (*Store, error) {
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
 
-	return &Store{db: db}, nil
+	key, err := loadOrCreateEncryptionKey(dbPath)
+	if err != nil {
+		return nil, fmt.Errorf("load encryption key: %w", err)
+	}
+
+	return &Store{db: db, encryptionKey: key}, nil
 }
 
 func migrate(db *sql.DB) error {
@@ -145,7 +158,12 @@ func migrate(db *sql.DB) error {
 // ===================== Provider Settings =====================
 
 func (s *Store) SaveProviderSetting(setting ProviderSetting) error {
-	_, err := s.db.Exec(`
+	encryptedKey, err := s.encryptSensitive(setting.APIKey)
+	if err != nil {
+		return err
+	}
+
+	_, err = s.db.Exec(`
 		INSERT INTO provider_settings (provider, api_key, base_url, is_enabled, updated_at)
 		VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
 		ON CONFLICT(provider) DO UPDATE SET
@@ -153,7 +171,7 @@ func (s *Store) SaveProviderSetting(setting ProviderSetting) error {
 			base_url = excluded.base_url,
 			is_enabled = excluded.is_enabled,
 			updated_at = CURRENT_TIMESTAMP`,
-		setting.Provider, setting.APIKey, setting.BaseURL, setting.IsEnabled,
+		setting.Provider, encryptedKey, setting.BaseURL, setting.IsEnabled,
 	)
 	return err
 }
@@ -167,6 +185,10 @@ func (s *Store) GetProviderSetting(provider string) (*ProviderSetting, error) {
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
+	if err != nil {
+		return nil, err
+	}
+	ps.APIKey, err = s.decryptSensitive(ps.APIKey)
 	if err != nil {
 		return nil, err
 	}
@@ -188,6 +210,10 @@ func (s *Store) GetAllProviderSettings() ([]ProviderSetting, error) {
 		if err := rows.Scan(&ps.Provider, &ps.APIKey, &ps.BaseURL, &ps.IsEnabled, &ps.UpdatedAt); err != nil {
 			return nil, err
 		}
+		ps.APIKey, err = s.decryptSensitive(ps.APIKey)
+		if err != nil {
+			return nil, err
+		}
 		settings = append(settings, ps)
 	}
 	return settings, nil
@@ -199,8 +225,12 @@ func (s *Store) DeleteProviderSetting(provider string) error {
 }
 
 func (s *Store) GetProviderAPIKey(provider string) string {
-	var key string
-	err := s.db.QueryRow(`SELECT api_key FROM provider_settings WHERE provider = ? AND is_enabled = 1`, provider).Scan(&key)
+	var encryptedKey string
+	err := s.db.QueryRow(`SELECT api_key FROM provider_settings WHERE provider = ? AND is_enabled = 1`, provider).Scan(&encryptedKey)
+	if err != nil {
+		return ""
+	}
+	key, err := s.decryptSensitive(encryptedKey)
 	if err != nil {
 		return ""
 	}
@@ -485,6 +515,10 @@ func (s *Store) HasAdminPassword() bool {
 // ResetAdminPassword removes the stored password.
 func (s *Store) ResetAdminPassword() error {
 	_, err := s.db.Exec(`DELETE FROM admin_config WHERE key = 'password_hash'`)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.Exec(`DELETE FROM sessions`)
 	return err
 }
 
@@ -498,7 +532,7 @@ func (s *Store) CreateSession(duration time.Duration) (string, error) {
 	token := hex.EncodeToString(tokenBytes)
 	expiresAt := time.Now().Add(duration)
 
-	_, err := s.db.Exec(`INSERT INTO sessions (token, expires_at) VALUES (?, ?)`, token, expiresAt)
+	_, err := s.db.Exec(`INSERT INTO sessions (token, expires_at) VALUES (?, ?)`, hashSessionToken(token), expiresAt)
 	if err != nil {
 		return "", err
 	}
@@ -509,7 +543,7 @@ func (s *Store) CreateSession(duration time.Duration) (string, error) {
 // ValidateSession checks if a session token is valid and not expired.
 func (s *Store) ValidateSession(token string) bool {
 	var expiresAt time.Time
-	err := s.db.QueryRow(`SELECT expires_at FROM sessions WHERE token = ?`, token).Scan(&expiresAt)
+	err := s.db.QueryRow(`SELECT expires_at FROM sessions WHERE token IN (?, ?)`, hashSessionToken(token), token).Scan(&expiresAt)
 	if err != nil {
 		return false
 	}
@@ -518,7 +552,7 @@ func (s *Store) ValidateSession(token string) bool {
 
 // DeleteSession removes a session.
 func (s *Store) DeleteSession(token string) error {
-	_, err := s.db.Exec(`DELETE FROM sessions WHERE token = ?`, token)
+	_, err := s.db.Exec(`DELETE FROM sessions WHERE token IN (?, ?)`, hashSessionToken(token), token)
 	return err
 }
 
@@ -574,4 +608,116 @@ func (s *Store) GetLockoutRemaining(ip string) int {
 
 func (s *Store) Close() error {
 	return s.db.Close()
+}
+
+func loadOrCreateEncryptionKey(dbPath string) ([]byte, error) {
+	if secret := strings.TrimSpace(os.Getenv("LLM_GATEWAY_ENCRYPTION_KEY")); secret != "" {
+		sum := sha256.Sum256([]byte(secret))
+		return sum[:], nil
+	}
+
+	if dbPath == ":memory:" || strings.Contains(dbPath, "mode=memory") {
+		return nil, nil
+	}
+
+	keyPath := dbPath + ".key"
+	if data, err := os.ReadFile(keyPath); err == nil {
+		return decodeEncryptionKey(strings.TrimSpace(string(data)))
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return nil, err
+	}
+
+	key := make([]byte, 32)
+	if _, err := rand.Read(key); err != nil {
+		return nil, err
+	}
+
+	if err := os.WriteFile(keyPath, []byte(base64.RawStdEncoding.EncodeToString(key)), 0o600); err != nil {
+		return nil, err
+	}
+
+	return key, nil
+}
+
+func decodeEncryptionKey(value string) ([]byte, error) {
+	if value == "" {
+		return nil, nil
+	}
+
+	for _, decode := range []func(string) ([]byte, error){
+		base64.RawStdEncoding.DecodeString,
+		base64.StdEncoding.DecodeString,
+		hex.DecodeString,
+	} {
+		decoded, err := decode(value)
+		if err == nil && len(decoded) == 32 {
+			return decoded, nil
+		}
+	}
+
+	sum := sha256.Sum256([]byte(value))
+	return sum[:], nil
+}
+
+func (s *Store) encryptSensitive(value string) (string, error) {
+	if value == "" || len(s.encryptionKey) == 0 || strings.HasPrefix(value, "enc:") {
+		return value, nil
+	}
+
+	block, err := aes.NewCipher(s.encryptionKey)
+	if err != nil {
+		return "", err
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return "", err
+	}
+
+	nonce := make([]byte, gcm.NonceSize())
+	if _, err := rand.Read(nonce); err != nil {
+		return "", err
+	}
+
+	ciphertext := gcm.Seal(nil, nonce, []byte(value), nil)
+	payload := append(nonce, ciphertext...)
+	return "enc:" + base64.RawStdEncoding.EncodeToString(payload), nil
+}
+
+func (s *Store) decryptSensitive(value string) (string, error) {
+	if value == "" || !strings.HasPrefix(value, "enc:") {
+		return value, nil
+	}
+	if len(s.encryptionKey) == 0 {
+		return "", fmt.Errorf("encrypted secret present but no encryption key configured")
+	}
+
+	payload, err := base64.RawStdEncoding.DecodeString(strings.TrimPrefix(value, "enc:"))
+	if err != nil {
+		return "", err
+	}
+
+	block, err := aes.NewCipher(s.encryptionKey)
+	if err != nil {
+		return "", err
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return "", err
+	}
+	if len(payload) < gcm.NonceSize() {
+		return "", fmt.Errorf("encrypted secret is malformed")
+	}
+
+	nonce := payload[:gcm.NonceSize()]
+	ciphertext := payload[gcm.NonceSize():]
+	plaintext, err := gcm.Open(nil, nonce, ciphertext, nil)
+	if err != nil {
+		return "", err
+	}
+	return string(plaintext), nil
+}
+
+func hashSessionToken(token string) string {
+	sum := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(sum[:])
 }

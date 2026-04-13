@@ -4,4 +4,5 @@
 *.db-shm
 llm-gateway
 *.exe
+*.key
 /data/

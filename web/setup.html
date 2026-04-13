@@ -75,7 +75,7 @@
     <div class="logo">
       <div class="icon">&#128075;</div>
       <h1>Welcome to <span>LLM</span> Gateway</h1>
-      <p>Create an admin password to secure your dashboard. You can reset it later with <code>--reset-password</code> flag.</p>
+      <p>Create an admin password to secure your dashboard. Remote setup requires the one-time token printed in the startup logs.</p>
     </div>
 
     <div class="error-msg" id="errorMsg"></div>
@@ -83,7 +83,7 @@
     <form onsubmit="handleSetup(event)">
       <div class="form-group">
         <label>Admin Password</label>
-        <input type="password" id="password" placeholder="Minimum 6 characters" autofocus required minlength="6" oninput="checkMatch()">
+        <input type="password" id="password" placeholder="Minimum 10 characters" autofocus required minlength="10" oninput="checkMatch()">
       </div>
       <div class="form-group">
         <label>Confirm Password</label>
@@ -146,7 +146,11 @@ async function handleSetup(e) {
     const res = await fetch('/admin/setup', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({password: pw, password_confirm: confirm}),
+      body: JSON.stringify({
+        password: pw,
+        password_confirm: confirm,
+        setup_token: new URLSearchParams(window.location.search).get('token') || ''
+      }),
     });
     const data = await res.json();
 

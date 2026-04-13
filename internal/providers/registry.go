@@ -32,8 +32,11 @@ func NewRegistry() *Registry {
 			"llama":    "groq",
 		},
 		exactMap: map[string]string{
-			"o1":              "openai",
-			"o3-mini":         "openai",
+			"o1":               "openai",
+			"o3-mini":          "openai",
+			"mistral-large":    "mistral",
+			"mistral-small":    "mistral",
+			"codestral":        "mistral",
 			"codestral-latest": "mistral",
 		},
 	}
@@ -51,6 +54,12 @@ func (r *Registry) Resolve(model string) (Provider, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
+	for _, p := range r.providers {
+		if p.SupportsModel(model) {
+			return p, nil
+		}
+	}
+
 	providerName := r.resolveProviderName(model)
 	if providerName == "" {
 		return nil, fmt.Errorf("no provider found for model %q", model)
@@ -58,13 +67,6 @@ func (r *Registry) Resolve(model string) (Provider, error) {
 
 	for _, p := range r.providers {
 		if p.Name() == providerName {
-			return p, nil
-		}
-	}
-
-	// Fallback: check all providers for explicit model support
-	for _, p := range r.providers {
-		if p.SupportsModel(model) {
 			return p, nil
 		}
 	}

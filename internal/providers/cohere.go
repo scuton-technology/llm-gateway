@@ -39,14 +39,14 @@ func (p *CohereProvider) SupportsModel(model string) bool {
 // Cohere Chat API types
 
 type cohereRequest struct {
-	Model       string           `json:"model"`
-	Message     string           `json:"message"`
-	ChatHistory []cohereMessage  `json:"chat_history,omitempty"`
-	Preamble    string           `json:"preamble,omitempty"`
-	Temperature *float64         `json:"temperature,omitempty"`
-	MaxTokens   *int             `json:"max_tokens,omitempty"`
-	P           *float64         `json:"p,omitempty"`
-	StopSequences []string       `json:"stop_sequences,omitempty"`
+	Model         string          `json:"model"`
+	Message       string          `json:"message"`
+	ChatHistory   []cohereMessage `json:"chat_history,omitempty"`
+	Preamble      string          `json:"preamble,omitempty"`
+	Temperature   *float64        `json:"temperature,omitempty"`
+	MaxTokens     *int            `json:"max_tokens,omitempty"`
+	P             *float64        `json:"p,omitempty"`
+	StopSequences []string        `json:"stop_sequences,omitempty"`
 }
 
 type cohereMessage struct {
@@ -55,10 +55,10 @@ type cohereMessage struct {
 }
 
 type cohereResponse struct {
-	ResponseID string           `json:"response_id"`
-	Text       string           `json:"text"`
-	Meta       *cohereMeta      `json:"meta"`
-	FinishReason string         `json:"finish_reason"`
+	ResponseID   string      `json:"response_id"`
+	Text         string      `json:"text"`
+	Meta         *cohereMeta `json:"meta"`
+	FinishReason string      `json:"finish_reason"`
 }
 
 type cohereMeta struct {
@@ -81,21 +81,27 @@ func (p *CohereProvider) ChatCompletion(ctx context.Context, req ChatRequest) (*
 
 	// Convert messages: last user message → message, rest → chat_history, system → preamble
 	for i, msg := range req.Messages {
+		text, err := msg.TextContent()
+		if err != nil {
+			return nil, fmt.Errorf("cohere adapter only supports text content: %w", err)
+		}
 		switch msg.Role {
 		case "system":
-			cReq.Preamble = msg.Content
+			cReq.Preamble = text
 		case "user":
 			if i == len(req.Messages)-1 {
-				cReq.Message = msg.Content
+				cReq.Message = text
 			} else {
 				cReq.ChatHistory = append(cReq.ChatHistory, cohereMessage{
-					Role: "USER", Message: msg.Content,
+					Role: "USER", Message: text,
 				})
 			}
 		case "assistant":
 			cReq.ChatHistory = append(cReq.ChatHistory, cohereMessage{
-				Role: "CHATBOT", Message: msg.Content,
+				Role: "CHATBOT", Message: text,
 			})
+		default:
+			return nil, fmt.Errorf("cohere does not support %q messages", msg.Role)
 		}
 	}
 
@@ -103,7 +109,11 @@ func (p *CohereProvider) ChatCompletion(ctx context.Context, req ChatRequest) (*
 	if cReq.Message == "" {
 		for i := len(req.Messages) - 1; i >= 0; i-- {
 			if req.Messages[i].Role == "user" {
-				cReq.Message = req.Messages[i].Content
+				text, err := req.Messages[i].TextContent()
+				if err != nil {
+					return nil, fmt.Errorf("cohere adapter only supports text content: %w", err)
+				}
+				cReq.Message = text
 				break
 			}
 		}
@@ -165,7 +175,7 @@ func (p *CohereProvider) ChatCompletion(ctx context.Context, req ChatRequest) (*
 		Choices: []Choice{
 			{
 				Index:        0,
-				Message:      Message{Role: "assistant", Content: cResp.Text},
+				Message:      Message{Role: "assistant", Content: NewTextContent(cResp.Text)},
 				FinishReason: finishReason,
 			},
 		},

@@ -136,7 +136,7 @@
 
     <div class="security-note">
       <span style="font-size:1rem;">&#128274;</span>
-      <p><strong>Security note:</strong> API keys are stored in SQLite (plaintext). For production, use environment variables (.env) instead.</p>
+      <p><strong>Security note:</strong> API keys are encrypted at rest. For shared or production deployments, prefer environment variables and set <code>LLM_GATEWAY_ENCRYPTION_KEY</code> explicitly.</p>
     </div>
 
     <div class="section-title">Cloud Providers</div>
